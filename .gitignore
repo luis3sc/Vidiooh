@@ -1,0 +1,18 @@
+# Dependencias (pesan mucho)
+node_modules/
+
+# Archivos de construcción de Next.js
+.next/
+out/
+build/
+
+# Variables de entorno (¡CLAVES SECRETAS!)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Archivos de sistema
+.DS_Store
+*.log
