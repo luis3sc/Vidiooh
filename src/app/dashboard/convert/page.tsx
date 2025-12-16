@@ -4,32 +4,42 @@ import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { Upload, Video, Zap, X, FileVideo, Download, Loader2, CheckCircle2 } from 'lucide-react'
 import { useFFmpeg } from '../../../hooks/useFFmpeg'
-import { fetchFile } from '@ffmpeg/util' 
+import { fetchFile } from '@ffmpeg/util'
+import { createBrowserClient } from '@supabase/ssr'
 
-// --- CONFIGURACIÓN ---
-const FORMATS = [
-  { id: '1280x720', label: '1280 x 720', w: 1280, h: 720 },
-  { id: '1280x616', label: '1280 x 616', w: 1280, h: 616 },
-  { id: '1280x654', label: '1280 x 654', w: 1280, h: 654 },
-  { id: '1280x672', label: '1280 x 672', w: 1280, h: 672 },
+// --- DEFAULTS ---
+const DEFAULT_FORMATS = [
+  { id: 'default_1', label: '1280 x 720', w: 1280, h: 720 },
+  { id: 'default_2', label: '1280 x 616', w: 1280, h: 616 },
+  { id: 'default_3', label: '1280 x 654', w: 1280, h: 654 },
+  { id: 'default_4', label: '1280 x 672', w: 1280, h: 672 },
 ]
 
+// Lista de pasos visuales
 const PROCESSING_STEPS = [
-  "Iniciando motor de renderizado...",
-  "Analizando duración original...",
-  "Calculando factor de velocidad...",
-  "Ajustando escala y dimensiones...",
-  "Reconstruyendo línea de tiempo...",
-  "Eliminando pista de audio...",
-  "¡Casi listo!"
+  "Iniciando motor...",
+  "Calculando duración...",
+  "Ajustando velocidad...",
+  "Redimensionando...",
+  "Eliminando audio...",
+  "Subiendo a la nube...",
+  "Guardando registro..."
 ]
 
 export default function ConvertPage() {
   const { ffmpeg, load, loaded, isLoading: isEngineLoading } = useFFmpeg()
+  
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+
+  // ESTADO DE FORMATOS (Defaults + DB)
+  const [formats, setFormats] = useState(DEFAULT_FORMATS)
+  const [selectedFormatId, setSelectedFormatId] = useState('default_1') // Usamos ID para seleccionar
 
   const [duration, setDuration] = useState(7)
   const [campaignName, setCampaignName] = useState('')
-  const [selectedFormat, setSelectedFormat] = useState('1280x720')
   const [file, setFile] = useState<File | null>(null)
   
   const [isProcessing, setIsProcessing] = useState(false)
@@ -38,8 +48,33 @@ export default function ConvertPage() {
   
   const downloadLinkRef = useRef<HTMLAnchorElement>(null)
 
+  useEffect(() => { load() }, [])
+
+  // --- CARGAR FORMATOS PERSONALIZADOS ---
   useEffect(() => {
-    load()
+    const loadCustomFormats = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data } = await supabase
+        .from('custom_formats')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true })
+
+      if (data && data.length > 0) {
+        // Mapeamos para que coincida con la estructura { id, label, w, h }
+        const customMapped = data.map(f => ({
+          id: f.id,
+          label: f.label, // El label visual (ej: 617)
+          w: f.width,     // El width real par (ej: 616)
+          h: f.height
+        }))
+        // Fusionamos
+        setFormats([...DEFAULT_FORMATS, ...customMapped])
+      }
+    }
+    loadCustomFormats()
   }, [])
 
   useEffect(() => {
@@ -48,7 +83,7 @@ export default function ConvertPage() {
       setCurrentStep(0)
       interval = setInterval(() => {
         setCurrentStep((prev) => (prev < PROCESSING_STEPS.length - 1 ? prev + 1 : prev))
-      }, 2000)
+      }, 1500)
     }
     return () => clearInterval(interval)
   }, [isProcessing])
@@ -67,56 +102,72 @@ export default function ConvertPage() {
     maxSize: 50 * 1024 * 1024
   })
 
-  // --- FUNCIÓN DE CONVERSIÓN CON SPEED RAMPING ---
   const handleProcess = async () => {
     if (!file || !ffmpeg) return
     setIsProcessing(true)
 
     try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error("No hay usuario autenticado")
+
       await ffmpeg.writeFile('input.mp4', await fetchFile(file))
-      const format = FORMATS.find(f => f.id === selectedFormat) || FORMATS[0]
+      
+      // BUSCAMOS EL FORMATO SELECCIONADO EN LA LISTA COMBINADA
+      const format = formats.find(f => f.id === selectedFormatId) || formats[0]
 
       const tempVideo = document.createElement('video')
       tempVideo.src = URL.createObjectURL(file)
-      
-      await new Promise((resolve) => {
-        tempVideo.onloadedmetadata = () => {
-          resolve(true)
-        }
-      })
-      
+      await new Promise((resolve) => { tempVideo.onloadedmetadata = () => resolve(true) })
       const inputDuration = tempVideo.duration || 10
       const ptsFactor = duration / inputDuration
 
+      // Usamos format.w y format.h (que ya vienen corregidos como pares desde la DB o defaults)
       await ffmpeg.exec([
         '-i', 'input.mp4',
         '-vf', `scale=${format.w}:${format.h},setsar=1:1,setpts=${ptsFactor}*PTS`,
-        '-an', 
-        '-c:v', 'libx264', 
-        '-preset', 'ultrafast', 
+        '-an',
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
         'output.mp4'
       ])
 
       const data = await ffmpeg.readFile('output.mp4')
-      const url = URL.createObjectURL(new Blob([data as any], { type: 'video/mp4' }))
+      const outputBlob = new Blob([data as any], { type: 'video/mp4' })
+      const outputUrl = URL.createObjectURL(outputBlob)
       
-      setTimeout(() => {
-        setVideoUrl(url)
-        setIsProcessing(false)
-      }, 800)
+      const fileName = `${user.id}/${Date.now()}_${campaignName || 'video'}.mp4`
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('raw-videos')
+        .upload(fileName, outputBlob, { contentType: 'video/mp4', upsert: false })
+
+      if (uploadError) throw uploadError
+
+      const { error: dbError } = await supabase
+        .from('conversion_logs')
+        .insert({
+          user_id: user.id,
+          original_name: file.name,
+          output_format: format.label, // Guardamos el nombre "visual" (ej: 1280x617)
+          duration: duration,
+          file_size: outputBlob.size,
+          file_path: uploadData.path 
+        })
+
+      if (dbError) throw dbError
+
+      setVideoUrl(outputUrl)
+      setIsProcessing(false)
       
     } catch (error) {
-      console.error(error)
-      alert('Error al procesar. Intenta con otro video.')
+      console.error("Error:", error)
+      alert('Error: ' + (error as any).message)
       setIsProcessing(false)
     }
   }
 
   const handleDownloadAndClose = () => {
-    if (downloadLinkRef.current) {
-      downloadLinkRef.current.click()
-    }
-
+    if (downloadLinkRef.current) downloadLinkRef.current.click()
     setTimeout(() => {
       setVideoUrl(null)
       setFile(null)
@@ -132,11 +183,10 @@ export default function ConvertPage() {
   return (
     <div className="max-w-6xl mx-auto animate-in fade-in duration-500 pb-8 md:pb-0 relative">
       
-      {/* MODAL */}
+      {/* MODAL PROCESANDO / ÉXITO */}
       {(isProcessing || videoUrl) && (
         <div className="fixed inset-0 z-[100] bg-[#020617]/95 backdrop-blur-xl flex flex-col items-center justify-center animate-in fade-in duration-300 p-4">
           
-          {/* ESTADO 1: PROCESANDO */}
           {isProcessing && !videoUrl && (
             <div className="flex flex-col items-center max-w-sm w-full animate-in slide-in-from-bottom-10 fade-in duration-500">
               <div className="relative w-28 h-28 md:w-32 md:h-32 mb-8">
@@ -150,58 +200,34 @@ export default function ConvertPage() {
               <p className="text-[#22c55e] text-xs md:text-sm font-mono animate-pulse min-h-[20px] text-center px-4">
                 {PROCESSING_STEPS[currentStep]}
               </p>
-              
-              {/* 👇👇 AQUÍ ESTÁ EL CAMBIO DE ANCHO (w-3/4 para móvil) 👇👇 */}
               <div className="w-3/4 md:w-full h-1 bg-slate-800 rounded-full mt-8 overflow-hidden">
                 <div 
                   className="h-full bg-[#22c55e] transition-all duration-1000 ease-linear"
                   style={{ width: `${((currentStep + 1) / PROCESSING_STEPS.length) * 100}%` }}
                 />
               </div>
-              
               <p className="text-slate-500 text-[10px] md:text-xs mt-4">No cierres esta pestaña</p>
             </div>
           )}
 
-          {/* ESTADO 2: ÉXITO */}
           {!isProcessing && videoUrl && (
             <div className="flex flex-col items-center w-full max-w-lg animate-in zoom-in-95 duration-300">
               <div className="flex flex-col items-center mb-6 text-center">
                 <div className="w-14 h-14 md:w-16 md:h-16 bg-[#22c55e] rounded-full flex items-center justify-center mb-4 shadow-[0_0_30px_rgba(34,197,94,0.4)] animate-bounce">
                   <CheckCircle2 className="text-black" size={30} strokeWidth={3} />
                 </div>
-                <h2 className="text-2xl md:text-3xl font-bold text-white mb-1">¡Video Listo!</h2>
-                <p className="text-slate-400 text-xs md:text-sm">Tu campaña ha sido procesada con éxito.</p>
+                <h2 className="text-2xl md:text-3xl font-bold text-white mb-1">¡Guardado en Historial!</h2>
+                <p className="text-slate-400 text-xs md:text-sm">Video procesado y almacenado en la nube.</p>
               </div>
-
               <div className="w-full bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800 mb-8 relative group">
-                <video 
-                  src={videoUrl} 
-                  controls 
-                  autoPlay 
-                  muted 
-                  className="w-full aspect-video object-contain bg-slate-900" 
-                />
+                <video src={videoUrl} controls autoPlay muted className="w-full aspect-video object-contain bg-slate-900" />
               </div>
-
               <div className="w-full space-y-3">
-                <button 
-                  onClick={handleDownloadAndClose}
-                  className="w-full bg-[#22c55e] hover:bg-[#1db954] text-black font-black text-base md:text-lg py-3 md:py-4 rounded-full flex items-center justify-center gap-3 transition-all hover:scale-[1.02] shadow-[0_0_20px_rgba(34,197,94,0.2)]"
-                >
-                  <Download size={22} strokeWidth={2.5} />
-                  DESCARGAR AHORA
+                <button onClick={handleDownloadAndClose} className="w-full bg-[#22c55e] hover:bg-[#1db954] text-black font-black text-base md:text-lg py-3 md:py-4 rounded-full flex items-center justify-center gap-3 transition-all hover:scale-[1.02] shadow-[0_0_20px_rgba(34,197,94,0.2)]">
+                  <Download size={22} strokeWidth={2.5} /> DESCARGAR AHORA
                 </button>
-                <a 
-                  ref={downloadLinkRef}
-                  href={videoUrl} 
-                  download={`vidiooh_${campaignName || 'campaign'}_${selectedFormat}.mp4`}
-                  className="hidden"
-                />
-                <button 
-                  onClick={handleClose}
-                  className="w-full text-slate-500 hover:text-white text-xs md:text-sm font-medium py-2 transition-colors"
-                >
+                <a ref={downloadLinkRef} href={videoUrl} download={`vidiooh_${campaignName || 'campaign'}_${formats.find(f=>f.id===selectedFormatId)?.label}.mp4`} className="hidden" />
+                <button onClick={handleClose} className="w-full text-slate-500 hover:text-white text-xs md:text-sm font-medium py-2 transition-colors">
                   Cerrar y convertir otro
                 </button>
               </div>
@@ -210,7 +236,7 @@ export default function ConvertPage() {
         </div>
       )}
 
-      {/* UI FONDO */}
+      {/* CONTENIDO PRINCIPAL */}
       <div className="mb-6 text-center md:text-left">
         <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">Procesador de Video 🎥</h1>
         <p className="text-slate-400 text-sm flex items-center justify-center md:justify-start gap-2">
@@ -253,17 +279,7 @@ export default function ConvertPage() {
               )}
             </div>
 
-            <button 
-              onClick={handleProcess}
-              disabled={!file || !loaded} 
-              className={`
-                mt-4 lg:mt-6 w-full py-3 lg:py-4 rounded-full font-black text-base lg:text-lg tracking-wide flex items-center justify-center gap-2 transition-all shadow-lg
-                ${(file && loaded)
-                  ? 'bg-[#22c55e] hover:bg-[#1db954] text-black shadow-[#22c55e]/20 cursor-pointer transform hover:scale-[1.02] active:scale-95' 
-                  : 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50'
-                }
-              `}
-            >
+            <button onClick={handleProcess} disabled={!file || !loaded} className={`mt-4 lg:mt-6 w-full py-3 lg:py-4 rounded-full font-black text-base lg:text-lg tracking-wide flex items-center justify-center gap-2 transition-all shadow-lg ${(file && loaded) ? 'bg-[#22c55e] hover:bg-[#1db954] text-black shadow-[#22c55e]/20 cursor-pointer transform hover:scale-[1.02] active:scale-95' : 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50'}`}>
                <Video size={20} /> PROCESAR VIDEO
             </button>
         </div>
@@ -276,17 +292,20 @@ export default function ConvertPage() {
 
           <div className="space-y-2">
             <label className="text-xs lg:text-sm font-bold text-white ml-1">Formato de Salida (px)</label>
-            <div className="grid grid-cols-2 gap-2">
-              {FORMATS.map((fmt) => (
+            <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+              {formats.map((fmt) => (
                 <button
                   key={fmt.id}
-                  onClick={() => setSelectedFormat(fmt.id)}
-                  className={`flex items-center justify-center gap-2 px-3 py-3 rounded-lg text-xs lg:text-sm font-medium transition-all border ${selectedFormat === fmt.id ? 'bg-[#22c55e] text-black border-[#22c55e] shadow-[0_0_15px_rgba(34,197,94,0.3)]' : 'bg-[#1A202C] text-slate-300 border-slate-700 hover:border-slate-500'}`}
+                  onClick={() => setSelectedFormatId(fmt.id)}
+                  className={`flex items-center justify-center gap-2 px-3 py-3 rounded-lg text-xs lg:text-sm font-medium transition-all border ${selectedFormatId === fmt.id ? 'bg-[#22c55e] text-black border-[#22c55e] shadow-[0_0_15px_rgba(34,197,94,0.3)]' : 'bg-[#1A202C] text-slate-300 border-slate-700 hover:border-slate-500'}`}
                 >
                   {fmt.label}
                 </button>
               ))}
             </div>
+            <p className="text-[10px] text-slate-500 text-right pt-1">
+              <a href="/dashboard/formats" className="hover:text-emerald-500 transition-colors">+ Gestionar Formatos</a>
+            </p>
           </div>
 
           <div className="bg-[#151921] border border-slate-800 rounded-2xl p-5 hover:border-slate-600 transition-colors">
