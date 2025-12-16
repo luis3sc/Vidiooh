@@ -28,7 +28,7 @@ export default function BottomNav() {
           <span className="text-[10px] mt-1">Formatos</span>
         </Link>
 
-        <Link href="/dashboard/profile" className={`flex flex-col items-center ${isActive('/dashboard/profile') ? 'text-violet-500' : 'text-slate-400'}`}>
+        <Link href="/dashboard/account" className={`flex flex-col items-center ${isActive('/dashboard/profile') ? 'text-violet-500' : 'text-slate-400'}`}>
           <User size={24} />
           <span className="text-[10px] mt-1">Cuenta</span>
         </Link>

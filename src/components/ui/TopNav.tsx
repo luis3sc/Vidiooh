@@ -64,7 +64,7 @@ export default function TopNav() {
         </Link>
 
         <Link 
-          href="/dashboard/profile" 
+          href="/dashboard/account" 
           className={`flex items-center gap-2 text-sm font-medium transition-colors ${isActive('/dashboard/profile') ? 'text-violet-500' : 'text-slate-400 hover:text-white'}`}
         >
           <User size={18} /> Mi Cuenta

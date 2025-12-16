@@ -15,7 +15,6 @@ const DEFAULT_FORMATS = [
   { id: 'default_4', label: '1280 x 672', w: 1280, h: 672 },
 ]
 
-// Lista de pasos visuales
 const PROCESSING_STEPS = [
   "Iniciando motor...",
   "Calculando duración...",
@@ -34,23 +33,24 @@ export default function ConvertPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  // ESTADO DE FORMATOS (Defaults + DB)
   const [formats, setFormats] = useState(DEFAULT_FORMATS)
-  const [selectedFormatId, setSelectedFormatId] = useState('default_1') // Usamos ID para seleccionar
+  const [selectedFormatId, setSelectedFormatId] = useState('default_1')
 
   const [duration, setDuration] = useState(7)
   const [campaignName, setCampaignName] = useState('')
   const [file, setFile] = useState<File | null>(null)
   
   const [isProcessing, setIsProcessing] = useState(false)
-  const [videoUrl, setVideoUrl] = useState<string | null>(null)
+  const [videoUrl, setVideoUrl] = useState<string | null>(null) // Guardará el BLOB LOCAL
+  const [finalOutputName, setFinalOutputName] = useState('')
+
   const [currentStep, setCurrentStep] = useState(0)
   
   const downloadLinkRef = useRef<HTMLAnchorElement>(null)
 
   useEffect(() => { load() }, [])
 
-  // --- CARGAR FORMATOS PERSONALIZADOS ---
+  // Cargar formatos personalizados
   useEffect(() => {
     const loadCustomFormats = async () => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -63,14 +63,12 @@ export default function ConvertPage() {
         .order('created_at', { ascending: true })
 
       if (data && data.length > 0) {
-        // Mapeamos para que coincida con la estructura { id, label, w, h }
         const customMapped = data.map(f => ({
           id: f.id,
-          label: f.label, // El label visual (ej: 617)
-          w: f.width,     // El width real par (ej: 616)
+          label: f.label,
+          w: f.width,
           h: f.height
         }))
-        // Fusionamos
         setFormats([...DEFAULT_FORMATS, ...customMapped])
       }
     }
@@ -102,6 +100,18 @@ export default function ConvertPage() {
     maxSize: 50 * 1024 * 1024
   })
 
+  // --- FUNCIÓN HELPER PARA FECHA ---
+  const getFormattedDate = () => {
+    const now = new Date()
+    const day = now.getDate().toString().padStart(2, '0')
+    const month = (now.getMonth() + 1).toString().padStart(2, '0')
+    const year = now.getFullYear()
+    const hours = now.getHours().toString().padStart(2, '0')
+    const minutes = now.getMinutes().toString().padStart(2, '0')
+    // Retorna: 16-12-2025_14-30
+    return `${day}-${month}-${year}_${hours}-${minutes}`
+  }
+
   const handleProcess = async () => {
     if (!file || !ffmpeg) return
     setIsProcessing(true)
@@ -112,7 +122,6 @@ export default function ConvertPage() {
 
       await ffmpeg.writeFile('input.mp4', await fetchFile(file))
       
-      // BUSCAMOS EL FORMATO SELECCIONADO EN LA LISTA COMBINADA
       const format = formats.find(f => f.id === selectedFormatId) || formats[0]
 
       const tempVideo = document.createElement('video')
@@ -121,7 +130,6 @@ export default function ConvertPage() {
       const inputDuration = tempVideo.duration || 10
       const ptsFactor = duration / inputDuration
 
-      // Usamos format.w y format.h (que ya vienen corregidos como pares desde la DB o defaults)
       await ffmpeg.exec([
         '-i', 'input.mp4',
         '-vf', `scale=${format.w}:${format.h},setsar=1:1,setpts=${ptsFactor}*PTS`,
@@ -133,22 +141,43 @@ export default function ConvertPage() {
 
       const data = await ffmpeg.readFile('output.mp4')
       const outputBlob = new Blob([data as any], { type: 'video/mp4' })
-      const outputUrl = URL.createObjectURL(outputBlob)
       
-      const fileName = `${user.id}/${Date.now()}_${campaignName || 'video'}.mp4`
+      // ---------------------------------------------------------
+      // 1. GENERAMOS LA URL LOCAL (BLOB) - ¡ESTO AHORRA DINERO!
+      // ---------------------------------------------------------
+      // Esta URL apunta a la memoria RAM del usuario, no a Supabase.
+      const localBlobUrl = URL.createObjectURL(outputBlob)
+      
+      // Construcción del nombre
+      const timestamp = getFormattedDate()
+      const baseName = campaignName 
+        ? campaignName.trim().replace(/\s+/g, '_') 
+        : file.name.replace(/\.[^/.]+$/, "").replace(/\s+/g, '_')
+      const cleanResolution = format.label.replace(/\s/g, '')
+      const finalName = `${baseName}_${duration}s_${cleanResolution}_${timestamp}.mp4`
+      
+      setFinalOutputName(finalName)
+
+      // ---------------------------------------------------------
+      // 2. SUBIDA SILENCIOSA (Para el Historial)
+      // ---------------------------------------------------------
+      // Subimos el archivo para que exista en el futuro, pero NO usamos 
+      // su URL para la descarga inmediata.
+      const storagePath = `${user.id}/${Date.now()}_${finalName}`
       
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('raw-videos')
-        .upload(fileName, outputBlob, { contentType: 'video/mp4', upsert: false })
+        .upload(storagePath, outputBlob, { contentType: 'video/mp4', upsert: false })
 
       if (uploadError) throw uploadError
 
+      // Insertar en Base de Datos
       const { error: dbError } = await supabase
         .from('conversion_logs')
         .insert({
           user_id: user.id,
-          original_name: file.name,
-          output_format: format.label, // Guardamos el nombre "visual" (ej: 1280x617)
+          original_name: finalName, 
+          output_format: format.label,
           duration: duration,
           file_size: outputBlob.size,
           file_path: uploadData.path 
@@ -156,7 +185,11 @@ export default function ConvertPage() {
 
       if (dbError) throw dbError
 
-      setVideoUrl(outputUrl)
+      // ---------------------------------------------------------
+      // 3. ESTABLECEMOS EL VIDEO PARA DESCARGA
+      // ---------------------------------------------------------
+      // Usamos 'localBlobUrl' que creamos en el paso 1
+      setVideoUrl(localBlobUrl) 
       setIsProcessing(false)
       
     } catch (error) {
@@ -167,23 +200,27 @@ export default function ConvertPage() {
   }
 
   const handleDownloadAndClose = () => {
+    // Esto activa el enlace oculto que tiene href={videoUrl} (el Blob local)
     if (downloadLinkRef.current) downloadLinkRef.current.click()
+    
     setTimeout(() => {
+      // Limpieza
       setVideoUrl(null)
       setFile(null)
       setCampaignName('')
+      setFinalOutputName('')
     }, 1500)
   }
 
   const handleClose = () => {
     setVideoUrl(null)
     setFile(null)
+    setFinalOutputName('')
   }
 
   return (
     <div className="max-w-6xl mx-auto animate-in fade-in duration-500 pb-8 md:pb-0 relative">
       
-      {/* MODAL PROCESANDO / ÉXITO */}
       {(isProcessing || videoUrl) && (
         <div className="fixed inset-0 z-[100] bg-[#020617]/95 backdrop-blur-xl flex flex-col items-center justify-center animate-in fade-in duration-300 p-4">
           
@@ -217,7 +254,7 @@ export default function ConvertPage() {
                   <CheckCircle2 className="text-black" size={30} strokeWidth={3} />
                 </div>
                 <h2 className="text-2xl md:text-3xl font-bold text-white mb-1">¡Guardado en Historial!</h2>
-                <p className="text-slate-400 text-xs md:text-sm">Video procesado y almacenado en la nube.</p>
+                <p className="text-slate-400 text-xs md:text-sm">Video procesado con éxito.</p>
               </div>
               <div className="w-full bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800 mb-8 relative group">
                 <video src={videoUrl} controls autoPlay muted className="w-full aspect-video object-contain bg-slate-900" />
@@ -226,7 +263,10 @@ export default function ConvertPage() {
                 <button onClick={handleDownloadAndClose} className="w-full bg-[#22c55e] hover:bg-[#1db954] text-black font-black text-base md:text-lg py-3 md:py-4 rounded-full flex items-center justify-center gap-3 transition-all hover:scale-[1.02] shadow-[0_0_20px_rgba(34,197,94,0.2)]">
                   <Download size={22} strokeWidth={2.5} /> DESCARGAR AHORA
                 </button>
-                <a ref={downloadLinkRef} href={videoUrl} download={`vidiooh_${campaignName || 'campaign'}_${formats.find(f=>f.id===selectedFormatId)?.label}.mp4`} className="hidden" />
+                {/* AQUÍ ESTÁ EL AHORRO DE BANDA ANCHA: 
+                   href={videoUrl} apunta al Blob local, no a Supabase.
+                */}
+                <a ref={downloadLinkRef} href={videoUrl} download={finalOutputName} className="hidden" />
                 <button onClick={handleClose} className="w-full text-slate-500 hover:text-white text-xs md:text-sm font-medium py-2 transition-colors">
                   Cerrar y convertir otro
                 </button>
