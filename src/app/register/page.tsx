@@ -2,9 +2,21 @@
 
 import React, { useState } from 'react'
 import Link from 'next/link'
-// CORREGIDO: Usamos ../.. para llegar a la carpeta lib sin usar @
 import { createClient } from '../../lib/supabase/client' 
-import { Lock, Mail, UserPlus, Loader2, AlertCircle } from 'lucide-react'
+import { Lock, Mail, Loader2, AlertCircle, ArrowLeft, ArrowRight, CheckCircle2 } from 'lucide-react'
+
+// --- COMPONENTE ICONO VIDIOOH (ACTUALIZADO - VERSIÓN MÁS GRANDE) ---
+const VidioohIcon = ({ className }: { className?: string }) => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    viewBox="0 0 494.22 494.22"
+    className={className}
+    fill="currentColor" // Hereda el color del texto del padre
+  >
+    <polygon points="167.38 472.94 8.67 472.94 8.67 60.65 321.86 250.45 107.71 390.55 107.71 245.14 160.84 245.14 160.84 292.3 222.19 252.17 61.8 154.98 61.8 419.81 150.22 419.81 389.85 246.91 96.45 66.54 124.28 21.28 485.56 243.38 167.38 472.94"/>
+  </svg>
+)
+// --------------------------------------------------
 
 export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false)
@@ -25,7 +37,6 @@ export default function RegisterPage() {
       email,
       password,
       options: {
-        // CORREGIDO: location.origin a veces falla en server, mejor dejarlo simple por ahora
         emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     })
@@ -41,54 +52,138 @@ export default function RegisterPage() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#020617] p-4 text-center">
-        <div className="max-w-md bg-slate-900/50 border border-slate-800 p-8 rounded-2xl">
-          <h2 className="text-2xl font-bold text-white mb-4">¡Cuenta Creada! 🚀</h2>
-          <p className="text-slate-400 mb-6">
-            Revisa tu correo para confirmar (o revisa Supabase si usas auto-confirm).
+      <div className="min-h-screen flex items-center justify-center bg-[#020617] p-4 text-center relative overflow-hidden">
+        {/* Fondo decorativo */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute top-[30%] left-[30%] w-[40%] h-[40%] rounded-full bg-vidiooh/10 blur-[120px]" />
+        </div>
+
+        <div className="max-w-md w-full bg-slate-900/50 backdrop-blur-xl border border-slate-800 p-8 rounded-3xl relative z-10 animate-in zoom-in-95 duration-500">
+          <div className="w-16 h-16 bg-vidiooh/20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <CheckCircle2 className="text-vidiooh" size={32} />
+          </div>
+          <h2 className="text-3xl font-bold text-white mb-4">¡Cuenta Creada! 🚀</h2>
+          <p className="text-slate-400 mb-8 text-lg">
+            Hemos enviado un enlace de confirmación a tu correo. Por favor revísalo para continuar.
           </p>
-          <Link href="/login" className="text-violet-500 hover:text-violet-400 font-medium">
-            Ir al Login
+          <Link href="/login">
+            <button className="w-full bg-vidiooh hover:bg-vidiooh-dark text-black font-bold py-4 rounded-xl transition-all hover:scale-[1.02] shadow-lg">
+                Ir al Login
+            </button>
           </Link>
+        </div>
+
+        {/* --- FOOTER AYLLUK (SUCCESS STATE) --- */}
+        <div className="absolute bottom-6 w-full text-center z-20">
+          <p className="text-[10px] md:text-xs text-slate-600 font-medium tracking-wide">
+            © 2025 Vidiooh. Tecnología desarrollada por <span className="text-slate-500 font-bold hover:text-vidiooh transition-colors cursor-default">Aylluk</span>.
+          </p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#020617] p-4">
-      <div className="w-full max-w-md bg-slate-900/50 border border-slate-800 rounded-2xl p-8">
-        <h1 className="text-3xl font-bold text-center text-white mb-8">Crear Cuenta</h1>
+    <div className="min-h-screen flex items-center justify-center bg-[#020617] p-4 relative">
+      
+      {/* --- BOTÓN VOLVER AL INICIO --- */}
+      <Link 
+        href="/" 
+        className="absolute top-6 left-6 md:top-10 md:left-10 flex items-center gap-2 text-slate-400 hover:text-white transition-colors group z-10"
+      >
+        <div className="p-2 bg-slate-900 border border-slate-800 rounded-full group-hover:border-vidiooh transition-colors">
+            <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+        </div>
+        <span className="text-sm font-medium hidden md:block">Volver al inicio</span>
+      </Link>
+
+      {/* Fondo decorativo */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -bottom-[20%] -right-[10%] w-[50%] h-[50%] rounded-full bg-vidiooh/5 blur-[100px]" />
+        <div className="absolute top-[20%] -left-[10%] w-[40%] h-[40%] rounded-full bg-vidiooh/5 blur-[100px]" />
+      </div>
+
+      <div className="relative w-full max-w-md bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 shadow-2xl animate-in fade-in zoom-in-95 duration-500 z-10">
+        
+        <div className="text-center mb-6">
+          <Link href="/" className="inline-flex items-center gap-2 mb-4 hover:opacity-80 transition-opacity">
+             <div className="w-10 h-10 bg-vidiooh rounded-xl flex items-center justify-center">
+                {/* --- NUEVO ICONO SVG --- */}
+                <VidioohIcon className="text-black w-6 h-6" /> 
+             </div>
+          </Link>
+          <h1 className="text-3xl font-bold text-white mb-2">Crear Cuenta</h1>
+          <p className="text-slate-400 text-sm">Únete para empezar a convertir videos.</p>
+        </div>
+
+        {/* --- LISTA DE BENEFICIOS --- */}
+        <div className="flex justify-center gap-4 mb-8 text-xs text-slate-300 font-medium">
+            <div className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-vidiooh" /> Sin marca de agua</div>
+            <div className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-vidiooh" /> Calidad HD</div>
+            <div className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-vidiooh" /> Gratis</div>
+        </div>
         
         {error && (
-          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/50 rounded-lg flex items-center gap-2 text-red-400 text-sm">
-            <AlertCircle size={16} /> {error}
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-400 text-sm">
+            <AlertCircle size={20} className="shrink-0" />
+            {error}
           </div>
         )}
 
-        <form onSubmit={handleRegister} className="space-y-6">
+        <form onSubmit={handleRegister} className="space-y-5">
           <div className="space-y-2">
-            <label className="text-xs font-medium text-slate-300">Correo</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-3 text-slate-500" size={18} />
-              <input name="email" type="email" placeholder="cliente@ejemplo.com" className="w-full bg-slate-950 border border-slate-800 text-white rounded-lg py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-violet-500" required />
+            <label className="text-xs font-bold text-slate-400 ml-1 uppercase">Correo Electrónico</label>
+            <div className="relative group">
+              <Mail className="absolute left-4 top-3.5 text-slate-500 group-focus-within:text-vidiooh transition-colors" size={20} />
+              <input 
+                name="email" 
+                type="email" 
+                placeholder="cliente@ejemplo.com" 
+                className="w-full bg-[#0f141c] border border-slate-800 text-white rounded-xl py-3.5 pl-12 pr-4 focus:border-vidiooh focus:ring-1 focus:ring-[#F04E30] outline-none transition-all placeholder:text-slate-600" 
+                required 
+              />
             </div>
           </div>
+
           <div className="space-y-2">
-            <label className="text-xs font-medium text-slate-300">Contraseña</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-3 text-slate-500" size={18} />
-              <input name="password" type="password" placeholder="******" className="w-full bg-slate-950 border border-slate-800 text-white rounded-lg py-2.5 pl-10 pr-4 outline-none focus:ring-1 focus:ring-violet-500" required />
+            <label className="text-xs font-bold text-slate-400 ml-1 uppercase">Contraseña</label>
+            <div className="relative group">
+              <Lock className="absolute left-4 top-3.5 text-slate-500 group-focus-within:text-vidiooh transition-colors" size={20} />
+              <input 
+                name="password" 
+                type="password" 
+                placeholder="******" 
+                className="w-full bg-[#0f141c] border border-slate-800 text-white rounded-xl py-3.5 pl-12 pr-4 focus:border-vidiooh focus:ring-1 focus:ring-[#F04E30] outline-none transition-all placeholder:text-slate-600" 
+                required 
+              />
             </div>
           </div>
-          <button type="submit" disabled={isLoading} className="w-full bg-violet-600 hover:bg-violet-700 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2">
-            {isLoading ? <Loader2 className="animate-spin" size={20} /> : <>Registrarme <UserPlus size={18} /></>}
+
+          <button 
+            type="submit" 
+            disabled={isLoading} 
+            className="w-full bg-vidiooh hover:bg-vidiooh-dark text-black font-bold py-4 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-[1.02] shadow-lg shadow-vidiooh/10"
+          >
+            {isLoading ? <Loader2 className="animate-spin" size={22} /> : <>Registrarme <ArrowRight size={20} /></>}
           </button>
         </form>
-        <div className="mt-8 text-center text-sm text-slate-500">
-          ¿Ya tienes cuenta? <Link href="/login" className="text-violet-400 hover:text-violet-300">Inicia Sesión</Link>
+
+        <div className="mt-8 pt-6 border-t border-slate-800/50 text-center text-sm text-slate-500">
+          ¿Ya tienes cuenta?{' '}
+          <Link href="/login" className="text-vidiooh hover:text-vidiooh-light font-bold hover:underline transition-colors">
+            Inicia Sesión
+          </Link>
         </div>
+
       </div>
+
+      {/* --- FOOTER AYLLUK (FORM STATE) --- */}
+      <div className="absolute bottom-6 w-full text-center z-0">
+        <p className="text-[10px] md:text-xs text-slate-600 font-medium tracking-wide">
+          © 2025 Vidiooh. Tecnología desarrollada por <span className="text-slate-500 font-bold hover:text-vidiooh transition-colors cursor-default">Aylluk</span>.
+        </p>
+      </div>
+
     </div>
   )
 }

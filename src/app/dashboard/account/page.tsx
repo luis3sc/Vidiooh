@@ -5,7 +5,7 @@ import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
 import { 
   User, Mail, Shield, LogOut, HardDrive, 
-  Activity, Crown, Zap, Loader2 
+  Activity, Crown, Zap, Loader2, Building2 
 } from 'lucide-react'
 
 export default function AccountPage() {
@@ -16,12 +16,16 @@ export default function AccountPage() {
   )
 
   const [loading, setLoading] = useState(true)
+  
+  // Datos del Usuario
   const [userEmail, setUserEmail] = useState('')
   const [userId, setUserId] = useState('')
-  
+  const [companyName, setCompanyName] = useState('Freelance / Independiente') 
+  const [userPlan, setUserPlan] = useState('FREE') 
+
   // Estadísticas
   const [monthlyVideos, setMonthlyVideos] = useState(0)
-  const [totalStorage, setTotalStorage] = useState(0) // En Bytes
+  const [totalStorage, setTotalStorage] = useState(0)
 
   // Cambio de Contraseña
   const [isChangingPass, setIsChangingPass] = useState(false)
@@ -33,8 +37,9 @@ export default function AccountPage() {
   }, [])
 
   const fetchUserData = async () => {
-    // 1. Obtener Usuario
+    // 1. Obtener Usuario Autenticado
     const { data: { user } } = await supabase.auth.getUser()
+    
     if (!user) {
       router.push('/login')
       return
@@ -43,7 +48,36 @@ export default function AccountPage() {
     setUserEmail(user.email || '')
     setUserId(user.id)
 
-    // 2. Calcular Estadísticas del Mes Actual
+    // 2. Obtener Perfil
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single()
+
+    if (profileError) {
+       console.error("Error al cargar perfil:", profileError.message)
+    }
+
+    // 3. Obtener Equipo / Plan
+    if (profile && profile.team_id) {
+        const { data: team } = await supabase
+            .from('teams')
+            .select('name, plan_type')
+            .eq('id', profile.team_id)
+            .single()
+        
+        if (team) {
+            setCompanyName(team.name)
+            // @ts-ignore
+            setUserPlan(team.plan_type?.toUpperCase() || 'FREE')
+        }
+    } else {
+        setCompanyName('Freelance / Independiente')
+        setUserPlan('FREE')
+    }
+    
+    // 4. Calcular Estadísticas
     const now = new Date()
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
 
@@ -51,11 +85,10 @@ export default function AccountPage() {
       .from('conversion_logs')
       .select('file_size')
       .eq('user_id', user.id)
-      .gte('created_at', firstDay) // Solo logs desde el día 1 del mes
+      .gte('created_at', firstDay)
 
     if (logs) {
       setMonthlyVideos(logs.length)
-      // Sumamos el peso de todos los videos
       const totalBytes = logs.reduce((acc, curr) => acc + (curr.file_size || 0), 0)
       setTotalStorage(totalBytes)
     }
@@ -63,7 +96,6 @@ export default function AccountPage() {
     setLoading(false)
   }
 
-  // Helper para convertir Bytes a MB/GB
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return '0 MB'
     const k = 1024
@@ -72,13 +104,11 @@ export default function AccountPage() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 
-  // Cerrar Sesión
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.push('/login')
   }
 
-  // Cambiar Contraseña
   const handleChangePassword = async () => {
     if (newPassword.length < 6) {
       alert('La contraseña debe tener al menos 6 caracteres')
@@ -100,7 +130,8 @@ export default function AccountPage() {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <Loader2 className="animate-spin text-emerald-500" size={32} />
+        {/* CAMBIO: Loader naranja */}
+        <Loader2 className="animate-spin text-vidiooh" size={32} />
       </div>
     )
   }
@@ -119,160 +150,163 @@ export default function AccountPage() {
         <div className="lg:col-span-2 space-y-6">
           
           {/* Tarjeta de Datos Personales */}
-          <div className="bg-[#151921] border border-slate-800 rounded-2xl p-6">
+          {/* CAMBIO: bg-[#0f141c] */}
+          <div className="bg-[#0f141c] border border-slate-800 rounded-2xl p-6">
             <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-2">
-              <User size={20} className="text-emerald-500" /> Información Personal
+              {/* CAMBIO: text-vidiooh */}
+              <User size={20} className="text-vidiooh" /> Información Personal
             </h3>
 
             <div className="space-y-4">
+              
+              {/* CAMPO: EMPRESA */}
               <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase ml-1">Correo Electrónico</label>
+                {/* CAMBIO: text-vidiooh */}
+                <label className="text-xs font-bold text-vidiooh uppercase ml-1">Empresa / Organización</label>
                 <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                  {/* CAMBIO: Icono naranja */}
+                  <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-vidiooh" size={18} />
                   <input 
                     type="text" 
-                    value={userEmail} 
+                    value={companyName} 
                     disabled 
-                    className="w-full bg-[#0f141c] border border-slate-800 rounded-xl pl-12 pr-4 py-3 text-slate-400 cursor-not-allowed select-none"
+                    // CAMBIO: border-vidiooh/30 y background ajustado
+                    className="w-full bg-[#151921] border border-vidiooh/30 rounded-xl pl-12 pr-4 py-3 text-white font-bold cursor-not-allowed select-none"
                   />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase ml-1">ID de Usuario</label>
-                <div className="relative">
-                  <Shield className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                  <input 
-                    type="text" 
-                    value={userId} 
-                    disabled 
-                    className="w-full bg-[#0f141c] border border-slate-800 rounded-xl pl-12 pr-4 py-3 text-slate-500 text-xs font-mono cursor-not-allowed"
-                  />
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase ml-1">Correo Electrónico</label>
+                  <div className="relative">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                    <input 
+                      type="text" 
+                      value={userEmail} 
+                      disabled 
+                      className="w-full bg-[#151921] border border-slate-800 rounded-xl pl-12 pr-4 py-3 text-slate-400 cursor-not-allowed select-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase ml-1">ID de Usuario</label>
+                  <div className="relative">
+                    <Shield className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                    <input 
+                      type="text" 
+                      value={userId.substring(0, 18) + '...'} 
+                      disabled 
+                      className="w-full bg-[#151921] border border-slate-800 rounded-xl pl-12 pr-4 py-3 text-slate-500 text-xs font-mono cursor-not-allowed"
+                    />
+                  </div>
                 </div>
               </div>
+
             </div>
           </div>
 
-          {/* Tarjeta de Seguridad (Contraseña) */}
-          <div className="bg-[#151921] border border-slate-800 rounded-2xl p-6">
+          {/* Tarjeta de Seguridad */}
+          <div className="bg-[#0f141c] border border-slate-800 rounded-2xl p-6">
             <h3 className="text-white font-bold text-lg mb-4 flex items-center gap-2">
-              <Shield size={20} className="text-emerald-500" /> Seguridad
+              {/* CAMBIO: text-vidiooh */}
+              <Shield size={20} className="text-vidiooh" /> Seguridad
             </h3>
-
+            
             {!isChangingPass ? (
-              <div className="flex items-center justify-between bg-[#0f141c] p-4 rounded-xl border border-slate-800">
+              <div className="flex items-center justify-between bg-[#151921] p-4 rounded-xl border border-slate-800">
                 <div>
                   <p className="text-white font-medium">Contraseña</p>
                   <p className="text-slate-500 text-xs">••••••••••••••••</p>
                 </div>
-                <button 
-                  onClick={() => setIsChangingPass(true)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm rounded-lg transition-colors"
-                >
+                <button onClick={() => setIsChangingPass(true)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm rounded-lg transition-colors">
                   Cambiar
                 </button>
               </div>
             ) : (
-              <div className="bg-[#0f141c] p-4 rounded-xl border border-slate-800 animate-in slide-in-from-top-2">
-                 <label className="text-xs font-bold text-emerald-500 uppercase mb-2 block">Nueva Contraseña</label>
-                 <input 
-                   type="password" 
-                   value={newPassword}
-                   onChange={(e) => setNewPassword(e.target.value)}
-                   placeholder="Mínimo 6 caracteres"
-                   className="w-full bg-[#151921] border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none mb-4"
-                 />
-                 <div className="flex gap-3">
-                   <button 
-                     onClick={handleChangePassword} 
-                     disabled={passLoading}
-                     className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-black font-bold py-2 rounded-lg transition-colors disabled:opacity-50"
-                   >
-                     {passLoading ? 'Actualizando...' : 'Guardar Nueva'}
-                   </button>
-                   <button 
-                     onClick={() => setIsChangingPass(false)} 
-                     className="px-4 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg"
-                   >
-                     Cancelar
-                   </button>
-                 </div>
+              <div className="bg-[#151921] p-4 rounded-xl border border-slate-800">
+                  {/* CAMBIO: text-vidiooh */}
+                  <label className="text-xs font-bold text-vidiooh uppercase mb-2 block">Nueva Contraseña</label>
+                  <input 
+                    type="password" 
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    // CAMBIO: focus:ring-vidiooh
+                    className="w-full bg-[#0f141c] border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-vidiooh outline-none mb-4"
+                  />
+                  <div className="flex gap-3">
+                    {/* CAMBIO: bg-vidiooh */}
+                    <button onClick={handleChangePassword} disabled={passLoading} className="flex-1 bg-vidiooh hover:bg-vidiooh-dark text-black font-bold py-2 rounded-lg">
+                      {passLoading ? 'Actualizando...' : 'Guardar Nueva'}
+                    </button>
+                    <button onClick={() => setIsChangingPass(false)} className="px-4 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg">Cancelar</button>
+                  </div>
               </div>
             )}
           </div>
-
         </div>
 
-        {/* COLUMNA DERECHA: ESTADÍSTICAS Y PLAN */}
+        {/* COLUMNA DERECHA: PLAN Y ESTADÍSTICAS */}
         <div className="space-y-6">
           
-          {/* Tarjeta de Plan */}
-          <div className="bg-gradient-to-br from-emerald-900/40 to-[#151921] border border-emerald-500/30 rounded-2xl p-6 relative overflow-hidden group">
+          {/* Tarjeta de Plan DINÁMICA */}
+          {/* CAMBIO: Gradiente naranja (vidiooh) */}
+          <div className="bg-gradient-to-br from-vidiooh/20 to-[#0f141c] border border-vidiooh/30 rounded-2xl p-6 relative overflow-hidden group">
             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-              <Crown size={100} />
+              <Crown size={100} className="text-vidiooh" />
             </div>
             
             <div className="flex items-center gap-2 mb-2">
-              <span className="bg-emerald-500 text-black text-[10px] font-black px-2 py-1 rounded-full uppercase tracking-widest">
+              {/* CAMBIO: Badge naranja si es PRO/CORP */}
+              <span className={`text-[10px] font-black px-2 py-1 rounded-full uppercase tracking-widest ${userPlan === 'PRO' || userPlan === 'CORPORATE' ? 'bg-vidiooh text-black' : 'bg-slate-600 text-white'}`}>
                 Plan Actual
               </span>
             </div>
-            <h2 className="text-3xl font-bold text-white mb-1">FREE</h2>
-            <p className="text-emerald-400 text-sm mb-6">Cuenta Gratuita</p>
+            <h2 className="text-3xl font-bold text-white mb-1">{userPlan === 'CORPORATE' ? 'EMPRESAS' : userPlan}</h2>
+            {/* CAMBIO: text-vidiooh */}
+            <p className="text-vidiooh text-sm mb-6">
+              {userPlan === 'FREE' ? 'Cuenta Gratuita' : userPlan === 'CORPORATE' ? 'Plan Corporativo Activo' : 'Suscripción Profesional'}
+            </p>
             
             <button className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 rounded-xl text-sm font-medium transition-colors cursor-not-allowed">
-              Gestionar Suscripción (Pronto)
+              Gestionar Suscripción
             </button>
           </div>
 
           {/* Estadísticas de Uso */}
-          <div className="bg-[#151921] border border-slate-800 rounded-2xl p-6">
+          <div className="bg-[#0f141c] border border-slate-800 rounded-2xl p-6">
+            
             <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-2">
-              <Activity size={20} className="text-emerald-500" /> Uso este Mes
+              {/* CAMBIO: text-vidiooh */}
+              <Activity size={20} className="text-vidiooh" /> Uso este Mes
             </h3>
-
+            
             <div className="space-y-6">
-              {/* Videos Convertidos */}
               <div>
                 <div className="flex justify-between text-sm mb-2">
-                  <span className="text-slate-400 flex items-center gap-2">
-                    <Zap size={14} /> Videos Convertidos
-                  </span>
-                  <span className="text-white font-mono">{monthlyVideos} / 100</span>
+                  <span className="text-slate-400 flex items-center gap-2"><Zap size={14} /> Videos Convertidos</span>
+                  <span className="text-white font-mono">{monthlyVideos} / {userPlan === 'FREE' ? '6' : '∞'}</span>
                 </div>
                 <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-emerald-500 rounded-full transition-all duration-1000" 
-                    style={{ width: `${Math.min((monthlyVideos / 100) * 100, 100)}%` }} 
-                  />
+                  {/* CAMBIO: Barra de progreso naranja */}
+                  <div className="h-full bg-vidiooh rounded-full" style={{ width: `${Math.min((monthlyVideos / (userPlan === 'FREE' ? 6 : 100)) * 100, 100)}%` }} />
                 </div>
               </div>
-
-              {/* Almacenamiento */}
               <div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-slate-400 flex items-center gap-2">
-                    <HardDrive size={14} /> Almacenamiento
-                  </span>
+                  <div className="flex justify-between text-sm mb-2">
+                  <span className="text-slate-400 flex items-center gap-2"><HardDrive size={14} /> Almacenamiento</span>
                   <span className="text-white font-mono">{formatBytes(totalStorage)}</span>
                 </div>
                 <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                  {/* Barra visual de progreso (ejemplo con límite ficticio de 1GB para mostrar algo) */}
-                  <div 
-                    className="h-full bg-blue-500 rounded-full transition-all duration-1000" 
-                    style={{ width: `${Math.min((totalStorage / (1024*1024*1024)) * 100, 100)}%` }} 
-                  />
+                   {/* CAMBIO: Barra de progreso también naranja (coherencia de marca) */}
+                   <div className="h-full bg-vidiooh rounded-full" style={{ width: '10%' }} /> 
                 </div>
-                <p className="text-[10px] text-slate-500 mt-2 text-right">Acumulado en videos generados</p>
               </div>
             </div>
           </div>
 
-          {/* Botón Cerrar Sesión */}
-          <button 
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all group"
-          >
+          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all group">
             <LogOut size={20} className="group-hover:-translate-x-1 transition-transform" />
             <span className="font-bold">Cerrar Sesión</span>
           </button>

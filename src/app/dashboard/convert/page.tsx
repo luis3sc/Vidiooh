@@ -228,18 +228,18 @@ export default function ConvertPage() {
             <div className="flex flex-col items-center max-w-sm w-full animate-in slide-in-from-bottom-10 fade-in duration-500">
               <div className="relative w-28 h-28 md:w-32 md:h-32 mb-8">
                 <div className="absolute inset-0 rounded-full border-4 border-slate-800"></div>
-                <div className="absolute inset-0 rounded-full border-4 border-t-[#22c55e] border-r-[#22c55e] border-b-transparent border-l-transparent animate-spin"></div>
+                <div className="absolute inset-0 rounded-full border-4 border-t-[#F04E30] border-r-[#F04E30] border-b-transparent border-l-transparent animate-spin"></div>
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <Zap className="text-[#22c55e] animate-pulse" size={36} fill="currentColor" />
+                  <Zap className="text-vidiooh animate-pulse" size={36} fill="currentColor" />
                 </div>
               </div>
               <h2 className="text-xl md:text-2xl font-bold text-white mb-2 tracking-tight text-center">Procesando Video</h2>
-              <p className="text-[#22c55e] text-xs md:text-sm font-mono animate-pulse min-h-[20px] text-center px-4">
+              <p className="text-vidiooh text-xs md:text-sm font-mono animate-pulse min-h-[20px] text-center px-4">
                 {PROCESSING_STEPS[currentStep]}
               </p>
               <div className="w-3/4 md:w-full h-1 bg-slate-800 rounded-full mt-8 overflow-hidden">
                 <div 
-                  className="h-full bg-[#22c55e] transition-all duration-1000 ease-linear"
+                  className="h-full bg-vidiooh transition-all duration-1000 ease-linear"
                   style={{ width: `${((currentStep + 1) / PROCESSING_STEPS.length) * 100}%` }}
                 />
               </div>
@@ -250,7 +250,7 @@ export default function ConvertPage() {
           {!isProcessing && videoUrl && (
             <div className="flex flex-col items-center w-full max-w-lg animate-in zoom-in-95 duration-300">
               <div className="flex flex-col items-center mb-6 text-center">
-                <div className="w-14 h-14 md:w-16 md:h-16 bg-[#22c55e] rounded-full flex items-center justify-center mb-4 shadow-[0_0_30px_rgba(34,197,94,0.4)] animate-bounce">
+                <div className="w-14 h-14 md:w-16 md:h-16 bg-vidiooh rounded-full flex items-center justify-center mb-4 shadow-[0_0_30px_rgba(34,197,94,0.4)] animate-bounce">
                   <CheckCircle2 className="text-black" size={30} strokeWidth={3} />
                 </div>
                 <h2 className="text-2xl md:text-3xl font-bold text-white mb-1">¡Guardado en Historial!</h2>
@@ -260,7 +260,7 @@ export default function ConvertPage() {
                 <video src={videoUrl} controls autoPlay muted className="w-full aspect-video object-contain bg-slate-900" />
               </div>
               <div className="w-full space-y-3">
-                <button onClick={handleDownloadAndClose} className="w-full bg-[#22c55e] hover:bg-[#1db954] text-black font-black text-base md:text-lg py-3 md:py-4 rounded-full flex items-center justify-center gap-3 transition-all hover:scale-[1.02] shadow-[0_0_20px_rgba(34,197,94,0.2)]">
+                <button onClick={handleDownloadAndClose} className="w-full bg-vidiooh hover:bg-vidiooh-dark text-black font-black text-base md:text-lg py-3 md:py-4 rounded-full flex items-center justify-center gap-3 transition-all hover:scale-[1.02] shadow-[0_0_20px_rgba(34,197,94,0.2)]">
                   <Download size={22} strokeWidth={2.5} /> DESCARGAR AHORA
                 </button>
                 {/* AQUÍ ESTÁ EL AHORRO DE BANDA ANCHA: 
@@ -282,7 +282,7 @@ export default function ConvertPage() {
         <p className="text-slate-400 text-sm flex items-center justify-center md:justify-start gap-2">
            {isEngineLoading 
              ? <span className="text-amber-400 animate-pulse flex items-center gap-1"><Loader2 size={12} className="animate-spin"/> Cargando motor...</span> 
-             : <span className="text-emerald-500 flex items-center gap-1"><CheckCircle2 size={12}/> Motor Listo</span>
+             : <span className="text-vidiooh flex items-center gap-1"><CheckCircle2 size={12}/> Motor Listo</span>
            }
         </p>
       </div>
@@ -294,14 +294,14 @@ export default function ConvertPage() {
               className={`
                 flex-1 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center transition-all cursor-pointer relative overflow-hidden
                 min-h-[220px] p-4 lg:min-h-[400px] lg:p-8
-                ${isDragActive ? 'border-[#22c55e] bg-[#22c55e]/10 scale-[0.98]' : 'border-slate-700 hover:border-[#22c55e]/50 hover:bg-[#151921]'}
+                ${isDragActive ? 'border-vidiooh bg-vidiooh/10 scale-[0.98]' : 'border-slate-700 hover:border-vidiooh/50 hover:bg-[#151921]'}
               `}
             >
               <input {...getInputProps()} />
               {file ? (
                 <div className="text-center animate-in zoom-in duration-300">
-                  <div className="w-14 h-14 lg:w-20 lg:h-20 bg-[#22c55e]/20 rounded-full flex items-center justify-center mx-auto mb-3 shadow-[0_0_30px_rgba(34,197,94,0.2)]">
-                    <FileVideo className="text-[#22c55e]" size={32} />
+                  <div className="w-14 h-14 lg:w-20 lg:h-20 bg-vidiooh/20 rounded-full flex items-center justify-center mx-auto mb-3 shadow-[0_0_30px_rgba(34,197,94,0.2)]">
+                    <FileVideo className="text-vidiooh" size={32} />
                   </div>
                   <h3 className="text-lg font-bold text-white mb-1 truncate max-w-[250px]">{file.name}</h3>
                   <p className="text-emerald-400 text-xs font-medium mb-4">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
@@ -310,16 +310,16 @@ export default function ConvertPage() {
               ) : (
                 <div className="text-center group">
                   <div className="w-14 h-14 lg:w-20 lg:h-20 bg-[#1A202C] rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform shadow-xl group-hover:shadow-[0_0_20px_rgba(34,197,94,0.2)]">
-                    <Upload className="text-[#22c55e]" size={28} />
+                    <Upload className="text-vidiooh" size={28} />
                   </div>
                   <h3 className="text-lg lg:text-2xl font-bold text-white mb-1">Cargar Video</h3>
-                  <p className="text-[#22c55e] text-sm font-medium mb-2 lg:mb-4 group-hover:underline decoration-2 underline-offset-4">Toca para explorar</p>
+                  <p className="text-vidiooh text-sm font-medium mb-2 lg:mb-4 group-hover:underline decoration-2 underline-offset-4">Toca para explorar</p>
                   <p className="text-slate-500 text-xs">Máx. 50MB (.mp4)</p>
                 </div>
               )}
             </div>
 
-            <button onClick={handleProcess} disabled={!file || !loaded} className={`mt-4 lg:mt-6 w-full py-3 lg:py-4 rounded-full font-black text-base lg:text-lg tracking-wide flex items-center justify-center gap-2 transition-all shadow-lg ${(file && loaded) ? 'bg-[#22c55e] hover:bg-[#1db954] text-black shadow-[#22c55e]/20 cursor-pointer transform hover:scale-[1.02] active:scale-95' : 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50'}`}>
+            <button onClick={handleProcess} disabled={!file || !loaded} className={`mt-4 lg:mt-6 w-full py-3 lg:py-4 rounded-full font-black text-base lg:text-lg tracking-wide flex items-center justify-center gap-2 transition-all shadow-lg ${(file && loaded) ? 'bg-vidiooh hover:bg-vidiooh-dark text-black shadow-vidiooh/20 cursor-pointer transform hover:scale-[1.02] active:scale-95' : 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50'}`}>
                <Video size={20} /> PROCESAR VIDEO
             </button>
         </div>
@@ -327,7 +327,7 @@ export default function ConvertPage() {
         <div className="order-2 lg:order-1 lg:col-span-5 space-y-6">
            <div className="space-y-2">
             <label className="text-xs lg:text-sm font-bold text-white ml-1">Nombre de la Campaña</label>
-            <input type="text" value={campaignName} onChange={(e) => setCampaignName(e.target.value)} placeholder="Ej. Promo Verano" className="w-full bg-[#1A202C] border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:ring-2 focus:ring-[#22c55e] outline-none transition-all focus:bg-[#0f141c]" />
+            <input type="text" value={campaignName} onChange={(e) => setCampaignName(e.target.value)} placeholder="Ej. Promo Verano" className="w-full bg-[#1A202C] border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:ring-2 focus:ring-[#F04E30] outline-none transition-all focus:bg-[#0f141c]" />
           </div>
 
           <div className="space-y-2">
@@ -337,7 +337,7 @@ export default function ConvertPage() {
                 <button
                   key={fmt.id}
                   onClick={() => setSelectedFormatId(fmt.id)}
-                  className={`flex items-center justify-center gap-2 px-3 py-3 rounded-lg text-xs lg:text-sm font-medium transition-all border ${selectedFormatId === fmt.id ? 'bg-[#22c55e] text-black border-[#22c55e] shadow-[0_0_15px_rgba(34,197,94,0.3)]' : 'bg-[#1A202C] text-slate-300 border-slate-700 hover:border-slate-500'}`}
+                  className={`flex items-center justify-center gap-2 px-3 py-3 rounded-lg text-xs lg:text-sm font-medium transition-all border ${selectedFormatId === fmt.id ? 'bg-vidiooh text-black border-vidiooh shadow-[0_0_15px_rgba(34,197,94,0.3)]' : 'bg-[#1A202C] text-slate-300 border-slate-700 hover:border-slate-500'}`}
                 >
                   {fmt.label}
                 </button>
@@ -351,10 +351,10 @@ export default function ConvertPage() {
           <div className="bg-[#151921] border border-slate-800 rounded-2xl p-5 hover:border-slate-600 transition-colors">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-sm lg:text-lg font-bold text-white">Duración</h3>
-              <span className="text-xl font-bold text-[#22c55e] drop-shadow-[0_0_5px_rgba(34,197,94,0.5)]">{duration}s</span>
+              <span className="text-xl font-bold text-vidiooh drop-shadow-[0_0_5px_rgba(34,197,94,0.5)]">{duration}s</span>
             </div>
             <div className="relative mb-1">
-              <input type="range" min="7" max="14" step="1" value={duration} onChange={(e) => setDuration(parseInt(e.target.value))} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-[#22c55e]" />
+              <input type="range" min="7" max="14" step="1" value={duration} onChange={(e) => setDuration(parseInt(e.target.value))} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-vidiooh" />
               <div className="flex justify-between text-[10px] text-slate-500 mt-2 font-mono"><span>7s</span><span>14s</span></div>
             </div>
           </div>

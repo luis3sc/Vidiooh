@@ -171,7 +171,7 @@ export default function FormatsPage() {
 
       <button
         onClick={() => openModal()}
-        className="fixed bottom-24 right-6 md:absolute md:bottom-auto md:top-0 md:right-0 w-12 h-12 md:w-14 md:h-14 bg-[#22c55e] hover:bg-[#1db954] text-black rounded-full shadow-[0_0_20px_rgba(34,197,94,0.3)] flex items-center justify-center transition-transform hover:scale-110 active:scale-95 z-50"
+        className="fixed bottom-24 right-6 md:absolute md:bottom-auto md:top-0 md:right-0 w-12 h-12 md:w-14 md:h-14 bg-vidiooh hover:bg-vidiooh-dark text-black rounded-full shadow-[0_0_20px_rgba(34,197,94,0.3)] flex items-center justify-center transition-transform hover:scale-110 active:scale-95 z-50"
       >
         <Plus size={28} strokeWidth={2.5} />
       </button>
@@ -187,21 +187,21 @@ export default function FormatsPage() {
             <div className="space-y-6">
               <div className="bg-[#151921] p-4 rounded-xl text-center border border-slate-800">
                 <span className="text-slate-500 text-xs uppercase tracking-wider font-bold block mb-1">Previsualización</span>
-                <span className="text-2xl font-mono text-[#22c55e] font-bold">
+                <span className="text-2xl font-mono text-vidiooh font-bold">
                   {inputW || '0'} <span className="text-slate-600">x</span> {inputH || '0'}
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-400 ml-1">ANCHO (PX)</label>
-                  <input type="number" value={inputW} onChange={(e) => setInputW(e.target.value)} placeholder="1920" className="w-full bg-[#1A202C] border border-slate-700 rounded-xl px-4 py-4 text-lg text-white font-mono focus:ring-2 focus:ring-[#22c55e] outline-none transition-all" />
+                  <input type="number" value={inputW} onChange={(e) => setInputW(e.target.value)} placeholder="1920" className="w-full bg-[#1A202C] border border-slate-700 rounded-xl px-4 py-4 text-lg text-white font-mono focus:ring-2 focus:ring-[#F04E30] outline-none transition-all" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-400 ml-1">ALTO (PX)</label>
-                  <input type="number" value={inputH} onChange={(e) => setInputH(e.target.value)} placeholder="1080" className="w-full bg-[#1A202C] border border-slate-700 rounded-xl px-4 py-4 text-lg text-white font-mono focus:ring-2 focus:ring-[#22c55e] outline-none transition-all" />
+                  <input type="number" value={inputH} onChange={(e) => setInputH(e.target.value)} placeholder="1080" className="w-full bg-[#1A202C] border border-slate-700 rounded-xl px-4 py-4 text-lg text-white font-mono focus:ring-2 focus:ring-[#F04E30] outline-none transition-all" />
                 </div>
               </div>
-              <button onClick={handleSave} disabled={!inputW || !inputH} className="w-full bg-[#22c55e] hover:bg-[#1db954] text-black font-bold text-lg py-4 rounded-xl flex items-center justify-center gap-2 transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed mt-4">
+              <button onClick={handleSave} disabled={!inputW || !inputH} className="w-full bg-vidiooh hover:bg-vidiooh-dark text-black font-bold text-lg py-4 rounded-xl flex items-center justify-center gap-2 transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed mt-4">
                 {editingId ? 'Guardar Cambios' : 'Crear Formato'}
               </button>
               
