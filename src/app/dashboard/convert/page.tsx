@@ -1,19 +1,102 @@
 'use client'
 
 import React, { useState, useCallback, useEffect, useRef } from 'react'
-import { useDropzone } from 'react-dropzone'
-import { Upload, Video, Zap, X, FileVideo, Download, Loader2, CheckCircle2 } from 'lucide-react'
+import { useDropzone, FileRejection } from 'react-dropzone'
+import { Upload, Video, Zap, X, FileVideo, Download, Loader2, CheckCircle2, AlertTriangle, ArrowRight, Lock, Ban, Sparkles, FileWarning } from 'lucide-react'
 import { useFFmpeg } from '../../../hooks/useFFmpeg'
 import { fetchFile } from '@ffmpeg/util'
 import { createBrowserClient } from '@supabase/ssr'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
-// --- DEFAULTS ---
-const DEFAULT_FORMATS = [
-  { id: 'default_1', label: '1280 x 720', w: 1280, h: 720 },
-  { id: 'default_2', label: '1280 x 616', w: 1280, h: 616 },
-  { id: 'default_3', label: '1280 x 654', w: 1280, h: 654 },
-  { id: 'default_4', label: '1280 x 672', w: 1280, h: 672 },
-]
+// --- COMPONENTE MODAL REUTILIZABLE (Con Diseño Personalizado) ---
+type ModalType = 'error' | 'limit' | 'banned' | null
+
+interface FeedbackModalProps {
+    type: ModalType
+    isOpen: boolean
+    onClose: () => void
+    data?: { used?: number, limit?: number }
+}
+
+const FeedbackModal = ({ type, isOpen, onClose, data }: FeedbackModalProps) => {
+    if (!isOpen || !type) return null
+
+    const content = {
+        error: {
+            icon: <FileWarning size={48} className="text-red-500" />,
+            title: "Archivo demasiado pesado",
+            description: "El video excede el límite de seguridad de 50MB. Procesar archivos tan grandes puede colgar tu navegador.",
+            buttonText: "Entendido, subiré otro",
+            buttonColor: "bg-slate-800 hover:bg-slate-700 text-white",
+            action: onClose
+        },
+        limit: {
+            icon: <Sparkles size={48} className="text-yellow-400 animate-pulse" />,
+            title: "Límite del Plan Alcanzado",
+            // CAMBIO: Texto neutro para que sirva tanto para FREE como para PRO
+            description: `Has consumido ${data?.used}/${data?.limit} conversiones de tu plan este mes. ¡No detengas tu flujo de trabajo!`,
+            extra: (
+                <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800 my-4 text-left text-sm text-slate-300">
+                    <p className="flex items-center gap-2 mb-2"><CheckCircle2 size={16} className="text-vidiooh"/> Aumentar Capacidad</p>
+                    <p className="flex items-center gap-2"><CheckCircle2 size={16} className="text-vidiooh"/> Historial Extendido</p>
+                </div>
+            ),
+            buttonText: "Mejorar mi Plan",
+            buttonColor: "bg-vidiooh hover:bg-vidiooh-dark text-black font-bold",
+            action: () => window.location.href = '/dashboard/pricing'
+        },
+        banned: {
+            icon: <Ban size={48} className="text-red-500" />,
+            title: "Cuenta Suspendida",
+            description: "Tu cuenta ha sido restringida por incumplimiento de políticas o falta de pago.",
+            buttonText: "Contactar Soporte",
+            buttonColor: "bg-red-600 hover:bg-red-700 text-white",
+            action: () => window.location.href = '/banned'
+        }
+    }
+
+    const current = content[type]
+
+    return (
+        <div className="fixed inset-0 z-[150] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-[#0f141c] border border-slate-800 w-full max-w-md rounded-3xl p-8 text-center shadow-2xl relative animate-in zoom-in-95 duration-300">
+                <button onClick={onClose} className="absolute top-4 right-4 text-slate-500 hover:text-white transition-colors">
+                    <X size={24} />
+                </button>
+                
+                <div className="flex justify-center mb-6">
+                    <div className="p-4 bg-slate-900 rounded-full border border-slate-800 shadow-lg">
+                        {current.icon}
+                    </div>
+                </div>
+                
+                <h3 className="text-2xl font-bold text-white mb-2">{current.title}</h3>
+                <p className="text-slate-400 text-sm leading-relaxed mb-6">
+                    {current.description}
+                </p>
+
+                {/* @ts-ignore */}
+                {current.extra}
+
+                <button 
+                    onClick={current.action}
+                    className={`w-full py-4 rounded-xl transition-all hover:scale-[1.02] active:scale-95 ${current.buttonColor}`}
+                >
+                    {current.buttonText}
+                </button>
+
+                {type === 'limit' && (
+                    <button onClick={onClose} className="mt-4 text-xs text-slate-500 hover:text-white underline">
+                        Quizás más tarde
+                    </button>
+                )}
+            </div>
+        </div>
+    )
+}
+
+// --- PÁGINA PRINCIPAL ---
 
 const PROCESSING_STEPS = [
   "Iniciando motor...",
@@ -25,54 +108,55 @@ const PROCESSING_STEPS = [
   "Guardando registro..."
 ]
 
+const getOrientation = (w: number, h: number) => {
+  if (w > h) return 'horizontal'
+  if (h > w) return 'vertical'
+  return 'square'
+}
+
 export default function ConvertPage() {
   const { ffmpeg, load, loaded, isLoading: isEngineLoading } = useFFmpeg()
-  
+  const router = useRouter()
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  const [formats, setFormats] = useState(DEFAULT_FORMATS)
-  const [selectedFormatId, setSelectedFormatId] = useState('default_1')
-
+  const [formats, setFormats] = useState<any[]>([])
+  const [formatsLoading, setFormatsLoading] = useState(true)
+  const [selectedFormatId, setSelectedFormatId] = useState<string>('')
   const [duration, setDuration] = useState(7)
   const [campaignName, setCampaignName] = useState('')
   const [file, setFile] = useState<File | null>(null)
   
+  const [videoMeta, setVideoMeta] = useState<{ w: number, h: number, orientation: string } | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
-  const [videoUrl, setVideoUrl] = useState<string | null>(null) // Guardará el BLOB LOCAL
+  const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [finalOutputName, setFinalOutputName] = useState('')
-
   const [currentStep, setCurrentStep] = useState(0)
   
+  const [modalType, setModalType] = useState<ModalType>(null)
+  const [modalData, setModalData] = useState<{ used?: number, limit?: number }>({})
+
   const downloadLinkRef = useRef<HTMLAnchorElement>(null)
 
   useEffect(() => { load() }, [])
 
-  // Cargar formatos personalizados
   useEffect(() => {
-    const loadCustomFormats = async () => {
+    const loadFormats = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-
-      const { data } = await supabase
-        .from('custom_formats')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: true })
-
+      const { data } = await supabase.from('custom_formats').select('*').eq('user_id', user.id).order('created_at', { ascending: true })
       if (data && data.length > 0) {
         const customMapped = data.map(f => ({
-          id: f.id,
-          label: f.label,
-          w: f.width,
-          h: f.height
+          id: f.id, label: f.label, w: f.width, h: f.height, orientation: getOrientation(f.width, f.height)
         }))
-        setFormats([...DEFAULT_FORMATS, ...customMapped])
+        setFormats(customMapped)
+        setSelectedFormatId(customMapped[0].id)
       }
+      setFormatsLoading(false)
     }
-    loadCustomFormats()
+    loadFormats()
   }, [])
 
   useEffect(() => {
@@ -86,10 +170,28 @@ export default function ConvertPage() {
     return () => clearInterval(interval)
   }, [isProcessing])
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
+  const onDrop = useCallback((acceptedFiles: File[], fileRejections: FileRejection[]) => {
+    if (fileRejections.length > 0) {
+        const rejection = fileRejections[0]
+        if (rejection.errors.some(e => e.code === 'file-too-large')) {
+            setModalType('error') 
+            return 
+        }
+    }
+
     if (acceptedFiles?.length > 0) {
-      setFile(acceptedFiles[0])
+      const selectedFile = acceptedFiles[0]
+      setFile(selectedFile)
       setVideoUrl(null)
+      const videoEl = document.createElement('video')
+      videoEl.preload = 'metadata'
+      videoEl.src = URL.createObjectURL(selectedFile)
+      videoEl.onloadedmetadata = () => {
+        window.URL.revokeObjectURL(videoEl.src)
+        const w = videoEl.videoWidth
+        const h = videoEl.videoHeight
+        setVideoMeta({ w, h, orientation: getOrientation(w, h) })
+      }
     }
   }, [])
 
@@ -100,133 +202,136 @@ export default function ConvertPage() {
     maxSize: 50 * 1024 * 1024
   })
 
-  // --- FUNCIÓN HELPER PARA FECHA ---
+  const selectedFormat = formats.find(f => f.id === selectedFormatId)
+  const isOrientationMismatch = React.useMemo(() => {
+    if (!videoMeta || !selectedFormat) return false
+    if (videoMeta.orientation === 'vertical' && selectedFormat.orientation === 'horizontal') return true
+    if (videoMeta.orientation === 'horizontal' && selectedFormat.orientation === 'vertical') return true
+    return false
+  }, [videoMeta, selectedFormat])
+
   const getFormattedDate = () => {
     const now = new Date()
-    const day = now.getDate().toString().padStart(2, '0')
-    const month = (now.getMonth() + 1).toString().padStart(2, '0')
-    const year = now.getFullYear()
-    const hours = now.getHours().toString().padStart(2, '0')
-    const minutes = now.getMinutes().toString().padStart(2, '0')
-    // Retorna: 16-12-2025_14-30
-    return `${day}-${month}-${year}_${hours}-${minutes}`
+    const d = (n: number) => n.toString().padStart(2, '0')
+    return `${d(now.getDate())}-${d(now.getMonth() + 1)}-${now.getFullYear()}_${d(now.getHours())}-${d(now.getMinutes())}`
   }
 
   const handleProcess = async () => {
-    if (!file || !ffmpeg) return
+    if (!file || !ffmpeg || formats.length === 0 || isOrientationMismatch) return
     setIsProcessing(true)
 
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("No hay usuario autenticado")
 
-      await ffmpeg.writeFile('input.mp4', await fetchFile(file))
-      
-      const format = formats.find(f => f.id === selectedFormatId) || formats[0]
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('status, plan_type, teams(plan_type)')
+        .eq('id', user.id)
+        .single()
 
+      if (profile && profile.status === 'banned') {
+          setModalType('banned') 
+          setIsProcessing(false)
+          return 
+      }
+
+      // --- NUEVA LÓGICA DE LÍMITES POR PLAN ---
+      // @ts-ignore
+      const actualPlan = profile?.teams?.plan_type || profile?.plan_type || 'FREE'
+
+      // Definimos los límites según las nuevas reglas
+      const PLAN_LIMITS: Record<string, number> = {
+          FREE: 6,
+          PRO: 45,
+          CORPORATE: 999999 // Ilimitado virtualmente
+      }
+
+      // Si no es CORPORATE, verificamos el consumo (FREE y PRO tienen tope)
+      if (actualPlan !== 'CORPORATE') {
+          const now = new Date()
+          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1) 
+          
+          const { count } = await supabase
+            .from('conversion_logs')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .gte('created_at', startOfMonth.toISOString()) 
+
+          const monthlyLimit = PLAN_LIMITS[actualPlan] || 6
+          const used = count || 0
+
+          if (used >= monthlyLimit) {
+              setIsProcessing(false) 
+              setModalData({ used, limit: monthlyLimit })
+              setModalType('limit')
+              return 
+          }
+      }
+
+      // PROCESAMIENTO FFMPEG
+      await ffmpeg.writeFile('input.mp4', await fetchFile(file))
+      const format = formats.find(f => f.id === selectedFormatId) || formats[0]
       const tempVideo = document.createElement('video')
       tempVideo.src = URL.createObjectURL(file)
       await new Promise((resolve) => { tempVideo.onloadedmetadata = () => resolve(true) })
-      const inputDuration = tempVideo.duration || 10
-      const ptsFactor = duration / inputDuration
+      const ptsFactor = duration / (tempVideo.duration || 10)
 
       await ffmpeg.exec([
-        '-i', 'input.mp4',
-        '-vf', `scale=${format.w}:${format.h},setsar=1:1,setpts=${ptsFactor}*PTS`,
-        '-an',
-        '-c:v', 'libx264',
-        '-preset', 'ultrafast',
-        'output.mp4'
+        '-i', 'input.mp4', '-vf', `scale=${format.w}:${format.h},setsar=1:1,setpts=${ptsFactor}*PTS`,
+        '-an', '-c:v', 'libx264', '-preset', 'ultrafast', 'output.mp4'
       ])
 
       const data = await ffmpeg.readFile('output.mp4')
       const outputBlob = new Blob([data as any], { type: 'video/mp4' })
-      
-      // ---------------------------------------------------------
-      // 1. GENERAMOS LA URL LOCAL (BLOB) - ¡ESTO AHORRA DINERO!
-      // ---------------------------------------------------------
-      // Esta URL apunta a la memoria RAM del usuario, no a Supabase.
       const localBlobUrl = URL.createObjectURL(outputBlob)
-      
-      // Construcción del nombre
-      const timestamp = getFormattedDate()
-      const baseName = campaignName 
-        ? campaignName.trim().replace(/\s+/g, '_') 
-        : file.name.replace(/\.[^/.]+$/, "").replace(/\s+/g, '_')
-      const cleanResolution = format.label.replace(/\s/g, '')
-      const finalName = `${baseName}_${duration}s_${cleanResolution}_${timestamp}.mp4`
-      
+      const finalName = `${campaignName ? campaignName.trim().replace(/\s+/g, '_') : file.name.replace(/\.[^/.]+$/, "")}_${duration}s_${format.label.replace(/\s/g, '')}_${getFormattedDate()}.mp4`
       setFinalOutputName(finalName)
 
-      // ---------------------------------------------------------
-      // 2. SUBIDA SILENCIOSA (Para el Historial)
-      // ---------------------------------------------------------
-      // Subimos el archivo para que exista en el futuro, pero NO usamos 
-      // su URL para la descarga inmediata.
+      // SUBIDA
       const storagePath = `${user.id}/${Date.now()}_${finalName}`
-      
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('raw-videos')
-        .upload(storagePath, outputBlob, { contentType: 'video/mp4', upsert: false })
-
+      const { data: uploadData, error: uploadError } = await supabase.storage.from('raw-videos').upload(storagePath, outputBlob, { contentType: 'video/mp4', upsert: false })
       if (uploadError) throw uploadError
 
-      // Insertar en Base de Datos
-      const { error: dbError } = await supabase
-        .from('conversion_logs')
-        .insert({
-          user_id: user.id,
-          original_name: finalName, 
-          output_format: format.label,
-          duration: duration,
-          file_size: outputBlob.size,
-          file_path: uploadData.path 
-        })
-
+      const { error: dbError } = await supabase.from('conversion_logs').insert({
+          user_id: user.id, original_name: finalName, output_format: format.label, duration: duration, file_size: outputBlob.size, file_path: uploadData.path 
+      })
       if (dbError) throw dbError
 
-      // ---------------------------------------------------------
-      // 3. ESTABLECEMOS EL VIDEO PARA DESCARGA
-      // ---------------------------------------------------------
-      // Usamos 'localBlobUrl' que creamos en el paso 1
       setVideoUrl(localBlobUrl) 
       setIsProcessing(false)
       
     } catch (error) {
       console.error("Error:", error)
-      alert('Error: ' + (error as any).message)
+      alert('Error inesperado: ' + (error as any).message) 
       setIsProcessing(false)
     }
   }
 
   const handleDownloadAndClose = () => {
-    // Esto activa el enlace oculto que tiene href={videoUrl} (el Blob local)
     if (downloadLinkRef.current) downloadLinkRef.current.click()
-    
-    setTimeout(() => {
-      // Limpieza
-      setVideoUrl(null)
-      setFile(null)
-      setCampaignName('')
-      setFinalOutputName('')
-    }, 1500)
+    setTimeout(() => { setVideoUrl(null); setFile(null); setCampaignName(''); setFinalOutputName(''); setVideoMeta(null); }, 1500)
   }
 
-  const handleClose = () => {
-    setVideoUrl(null)
-    setFile(null)
-    setFinalOutputName('')
-  }
+  const handleClose = () => { setVideoUrl(null); setFile(null); setFinalOutputName(''); setVideoMeta(null); }
 
   return (
     <div className="max-w-6xl mx-auto animate-in fade-in duration-500 pb-8 md:pb-0 relative">
       
+      {/* --- INYECCIÓN DEL MODAL --- */}
+      <FeedbackModal 
+        isOpen={!!modalType} 
+        type={modalType} 
+        onClose={() => setModalType(null)} 
+        data={modalData}
+      />
+
+      {/* --- MODAL DE CARGA (OVERLAY) --- */}
       {(isProcessing || videoUrl) && (
         <div className="fixed inset-0 z-[100] bg-[#020617]/95 backdrop-blur-xl flex flex-col items-center justify-center animate-in fade-in duration-300 p-4">
-          
           {isProcessing && !videoUrl && (
             <div className="flex flex-col items-center max-w-sm w-full animate-in slide-in-from-bottom-10 fade-in duration-500">
-              <div className="relative w-28 h-28 md:w-32 md:h-32 mb-8">
+               <div className="relative w-28 h-28 md:w-32 md:h-32 mb-8">
                 <div className="absolute inset-0 rounded-full border-4 border-slate-800"></div>
                 <div className="absolute inset-0 rounded-full border-4 border-t-[#F04E30] border-r-[#F04E30] border-b-transparent border-l-transparent animate-spin"></div>
                 <div className="absolute inset-0 flex items-center justify-center">
@@ -238,12 +343,8 @@ export default function ConvertPage() {
                 {PROCESSING_STEPS[currentStep]}
               </p>
               <div className="w-3/4 md:w-full h-1 bg-slate-800 rounded-full mt-8 overflow-hidden">
-                <div 
-                  className="h-full bg-vidiooh transition-all duration-1000 ease-linear"
-                  style={{ width: `${((currentStep + 1) / PROCESSING_STEPS.length) * 100}%` }}
-                />
+                <div className="h-full bg-vidiooh transition-all duration-1000 ease-linear" style={{ width: `${((currentStep + 1) / PROCESSING_STEPS.length) * 100}%` }} />
               </div>
-              <p className="text-slate-500 text-[10px] md:text-xs mt-4">No cierres esta pestaña</p>
             </div>
           )}
 
@@ -254,7 +355,6 @@ export default function ConvertPage() {
                   <CheckCircle2 className="text-black" size={30} strokeWidth={3} />
                 </div>
                 <h2 className="text-2xl md:text-3xl font-bold text-white mb-1">¡Guardado en Historial!</h2>
-                <p className="text-slate-400 text-xs md:text-sm">Video procesado con éxito.</p>
               </div>
               <div className="w-full bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800 mb-8 relative group">
                 <video src={videoUrl} controls autoPlay muted className="w-full aspect-video object-contain bg-slate-900" />
@@ -263,9 +363,6 @@ export default function ConvertPage() {
                 <button onClick={handleDownloadAndClose} className="w-full bg-vidiooh hover:bg-vidiooh-dark text-black font-black text-base md:text-lg py-3 md:py-4 rounded-full flex items-center justify-center gap-3 transition-all hover:scale-[1.02] shadow-[0_0_20px_rgba(34,197,94,0.2)]">
                   <Download size={22} strokeWidth={2.5} /> DESCARGAR AHORA
                 </button>
-                {/* AQUÍ ESTÁ EL AHORRO DE BANDA ANCHA: 
-                   href={videoUrl} apunta al Blob local, no a Supabase.
-                */}
                 <a ref={downloadLinkRef} href={videoUrl} download={finalOutputName} className="hidden" />
                 <button onClick={handleClose} className="w-full text-slate-500 hover:text-white text-xs md:text-sm font-medium py-2 transition-colors">
                   Cerrar y convertir otro
@@ -288,13 +385,16 @@ export default function ConvertPage() {
       </div>
 
       <div className="flex flex-col lg:grid lg:grid-cols-12 gap-6 lg:gap-8">
+        
+        {/* COLUMNA IZQUIERDA: DROPZONE */}
         <div className="order-1 lg:order-2 lg:col-span-7 flex flex-col h-full">
             <div 
               {...getRootProps()} 
               className={`
                 flex-1 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center transition-all cursor-pointer relative overflow-hidden
                 min-h-[220px] p-4 lg:min-h-[400px] lg:p-8
-                ${isDragActive ? 'border-vidiooh bg-vidiooh/10 scale-[0.98]' : 'border-slate-700 hover:border-vidiooh/50 hover:bg-[#151921]'}
+                ${isDragActive ? 'border-vidiooh bg-vidiooh/10 scale-[0.98]' : ''}
+                ${isOrientationMismatch ? 'border-red-500/50 bg-red-500/5 hover:border-red-500' : 'border-slate-700 hover:border-vidiooh/50 hover:bg-[#151921]'}
               `}
             >
               <input {...getInputProps()} />
@@ -304,8 +404,21 @@ export default function ConvertPage() {
                     <FileVideo className="text-vidiooh" size={32} />
                   </div>
                   <h3 className="text-lg font-bold text-white mb-1 truncate max-w-[250px]">{file.name}</h3>
+                  
+                  {/* METADATOS DEL VIDEO */}
+                  {videoMeta && (
+                      <div className="flex items-center justify-center gap-2 mb-4">
+                          <span className="bg-slate-800 px-2 py-1 rounded text-xs text-slate-300 font-mono">
+                              {videoMeta.w}x{videoMeta.h}
+                          </span>
+                          <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${videoMeta.orientation === 'vertical' ? 'bg-amber-500/20 text-amber-500' : 'bg-blue-500/20 text-blue-500'}`}>
+                              {videoMeta.orientation}
+                          </span>
+                      </div>
+                  )}
+
                   <p className="text-emerald-400 text-xs font-medium mb-4">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
-                  <button onClick={(e) => { e.stopPropagation(); setFile(null); }} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-full text-xs transition-colors flex items-center gap-2 mx-auto hover:text-white"><X size={14} /> Cambiar</button>
+                  <button onClick={(e) => { e.stopPropagation(); setFile(null); setVideoMeta(null); }} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-full text-xs transition-colors flex items-center gap-2 mx-auto hover:text-white"><X size={14} /> Cambiar</button>
                 </div>
               ) : (
                 <div className="text-center group">
@@ -319,11 +432,35 @@ export default function ConvertPage() {
               )}
             </div>
 
-            <button onClick={handleProcess} disabled={!file || !loaded} className={`mt-4 lg:mt-6 w-full py-3 lg:py-4 rounded-full font-black text-base lg:text-lg tracking-wide flex items-center justify-center gap-2 transition-all shadow-lg ${(file && loaded) ? 'bg-vidiooh hover:bg-vidiooh-dark text-black shadow-vidiooh/20 cursor-pointer transform hover:scale-[1.02] active:scale-95' : 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50'}`}>
-               <Video size={20} /> PROCESAR VIDEO
+            {/* ERROR VISUAL SI HAY MISMATCH (INLINE) */}
+            {isOrientationMismatch && (
+                <div className="mt-4 bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-start gap-3 animate-in slide-in-from-top-2">
+                    <Ban className="text-red-500 shrink-0 mt-0.5" size={20}/>
+                    <div>
+                        <h4 className="text-red-200 font-bold text-sm">Formato Incompatible</h4>
+                        <p className="text-red-400/80 text-xs mt-1">
+                            Estás intentando convertir un video <strong className="uppercase">{videoMeta?.orientation}</strong> a un formato <strong className="uppercase">{selectedFormat?.orientation}</strong>. 
+                            Esto causará distorsión. Por favor elige otro formato.
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {/* BOTÓN PROCESAR */}
+            <button 
+                onClick={handleProcess} 
+                disabled={!file || !loaded || formats.length === 0 || isOrientationMismatch} 
+                className={`mt-4 lg:mt-6 w-full py-3 lg:py-4 rounded-full font-black text-base lg:text-lg tracking-wide flex items-center justify-center gap-2 transition-all shadow-lg 
+                ${(file && loaded && formats.length > 0 && !isOrientationMismatch) 
+                    ? 'bg-vidiooh hover:bg-vidiooh-dark text-black shadow-vidiooh/20 cursor-pointer transform hover:scale-[1.02] active:scale-95' 
+                    : 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50'}`}
+            >
+               {formats.length === 0 ? <Lock size={20}/> : <Video size={20} />}
+               {formats.length === 0 ? "CREA UN FORMATO PRIMERO" : "PROCESAR VIDEO"}
             </button>
         </div>
 
+        {/* COLUMNA DERECHA: CONFIGURACIÓN */}
         <div className="order-2 lg:order-1 lg:col-span-5 space-y-6">
            <div className="space-y-2">
             <label className="text-xs lg:text-sm font-bold text-white ml-1">Nombre de la Campaña</label>
@@ -331,21 +468,57 @@ export default function ConvertPage() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs lg:text-sm font-bold text-white ml-1">Formato de Salida (px)</label>
-            <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
-              {formats.map((fmt) => (
-                <button
-                  key={fmt.id}
-                  onClick={() => setSelectedFormatId(fmt.id)}
-                  className={`flex items-center justify-center gap-2 px-3 py-3 rounded-lg text-xs lg:text-sm font-medium transition-all border ${selectedFormatId === fmt.id ? 'bg-vidiooh text-black border-vidiooh shadow-[0_0_15px_rgba(34,197,94,0.3)]' : 'bg-[#1A202C] text-slate-300 border-slate-700 hover:border-slate-500'}`}
-                >
-                  {fmt.label}
-                </button>
-              ))}
-            </div>
-            <p className="text-[10px] text-slate-500 text-right pt-1">
-              <a href="/dashboard/formats" className="hover:text-emerald-500 transition-colors">+ Gestionar Formatos</a>
-            </p>
+            <label className="text-xs lg:text-sm font-bold text-white ml-1 flex justify-between">
+                <span>Formato de Salida (px)</span>
+                {formatsLoading && <span className="flex items-center gap-1 text-slate-500"><Loader2 size={10} className="animate-spin"/> Cargando...</span>}
+            </label>
+            
+            {!formatsLoading && formats.length === 0 ? (
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 text-center">
+                    <AlertTriangle className="mx-auto text-amber-500 mb-2" size={24}/>
+                    <p className="text-amber-200 font-bold text-sm mb-1">Sin formatos configurados</p>
+                    <p className="text-amber-500/80 text-xs mb-3">Debes crear al menos un formato para convertir videos.</p>
+                    <Link href="/dashboard/formats" className="inline-flex items-center gap-2 bg-amber-500 text-black text-xs font-bold px-4 py-2 rounded-lg hover:bg-amber-400 transition-colors">
+                        Crear Formato <ArrowRight size={12}/>
+                    </Link>
+                </div>
+            ) : (
+                <>
+                    <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+                    {formats.map((fmt) => {
+                        let isFormatIncompatible = false
+                        if (videoMeta) {
+                            if (videoMeta.orientation === 'vertical' && fmt.orientation === 'horizontal') isFormatIncompatible = true
+                            if (videoMeta.orientation === 'horizontal' && fmt.orientation === 'vertical') isFormatIncompatible = true
+                        }
+
+                        return (
+                            <button
+                            key={fmt.id}
+                            onClick={() => setSelectedFormatId(fmt.id)}
+                            className={`flex items-center justify-center px-3 py-3 rounded-lg text-xs lg:text-sm font-medium transition-all border relative overflow-hidden
+                                ${selectedFormatId === fmt.id 
+                                    ? (isFormatIncompatible ? 'bg-red-500/20 border-red-500 text-red-200' : 'bg-vidiooh text-black border-vidiooh shadow-[0_0_15px_rgba(34,197,94,0.3)]')
+                                    : (isFormatIncompatible ? 'bg-[#1A202C] text-slate-500 border-slate-700 opacity-50' : 'bg-[#1A202C] text-slate-300 border-slate-700 hover:border-slate-500')
+                                }
+                            `}
+                            >
+                            <span className="z-10 font-medium">{fmt.label}</span>
+                            
+                            {isFormatIncompatible && selectedFormatId === fmt.id && (
+                                <span className="absolute inset-0 bg-red-500/10 flex items-center justify-center">
+                                    <Ban size={24} className="text-red-500/50 rotate-45"/>
+                                </span>
+                            )}
+                            </button>
+                        )
+                    })}
+                    </div>
+                    <p className="text-[10px] text-slate-500 text-right pt-1">
+                        <Link href="/dashboard/formats" className="hover:text-emerald-500 transition-colors">+ Gestionar Formatos</Link>
+                    </p>
+                </>
+            )}
           </div>
 
           <div className="bg-[#151921] border border-slate-800 rounded-2xl p-5 hover:border-slate-600 transition-colors">

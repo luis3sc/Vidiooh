@@ -2,9 +2,13 @@
 
 import React, { useState, useEffect } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
-import { Clock, Trash2, Download, AlertTriangle, PlayCircle, Loader2 } from 'lucide-react'
+import { 
+  Clock, Trash2, Download, AlertTriangle, PlayCircle, Loader2, 
+  ShieldCheck, CloudOff, ArrowRight, Search 
+} from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
+import Link from 'next/link'
 
 type ConversionLog = {
   id: string
@@ -14,6 +18,7 @@ type ConversionLog = {
   duration: number
   file_path: string
   deleted_at: string | null
+  file_size: number
 }
 
 export default function HistoryPage() {
@@ -26,25 +31,74 @@ export default function HistoryPage() {
   const [loading, setLoading] = useState(true)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [logToDelete, setLogToDelete] = useState<ConversionLog | null>(null)
+  const [userPlan, setUserPlan] = useState<string>('FREE')
 
   useEffect(() => {
-    fetchLogs()
+    fetchData()
   }, [])
 
-  const fetchLogs = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+  const fetchData = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
 
-    const { data } = await supabase
-      .from('conversion_logs')
-      .select('*')
-      .eq('user_id', user.id)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-      .limit(20)
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('plan_type, teams(plan_type)')
+        .eq('id', user.id)
+        .single()
 
-    if (data) setLogs(data)
-    setLoading(false)
+      // @ts-ignore
+      const actualPlan = profile?.teams?.plan_type || profile?.plan_type || 'FREE'
+      setUserPlan(actualPlan)
+
+      // Si es FREE, no buscamos logs (porque no deberían existir en la nube)
+      if (actualPlan === 'FREE') {
+        setLoading(false)
+        return
+      }
+
+      // --- NUEVA LÓGICA DE FILTRADO DE HISTORIAL ---
+      let query = supabase
+        .from('conversion_logs')
+        .select('*')
+        .eq('user_id', user.id)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+
+      // Reglas PRO:
+      if (actualPlan === 'PRO') {
+          // 1. Solo últimos 7 días
+          const sevenDaysAgo = new Date()
+          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+          query = query.gte('created_at', sevenDaysAgo.toISOString())
+          
+          // 2. Solo últimos 8 videos
+          query = query.limit(8)
+      } 
+      // Reglas CORPORATE:
+      else if (actualPlan === 'CORPORATE') {
+          // 1. Solo últimos 15 días
+          const fifteenDaysAgo = new Date()
+          fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15)
+          query = query.gte('created_at', fifteenDaysAgo.toISOString())
+          
+          // Sin límite de cantidad (o un límite alto por seguridad de UI)
+          query = query.limit(100)
+      } else {
+          // Fallback por si acaso (aunque FREE ya retornó arriba)
+          query = query.limit(20)
+      }
+
+      const { data } = await query
+
+      if (data) setLogs(data)
+
+    } catch (error) {
+      console.error("Error fetching data:", error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const confirmDelete = (log: ConversionLog) => {
@@ -54,50 +108,109 @@ export default function HistoryPage() {
 
   const handleDelete = async () => {
     if (!logToDelete) return
-
-    // 1. Borrado Físico (Storage)
-    const { error: storageError } = await supabase.storage
-      .from('raw-videos')
-      .remove([logToDelete.file_path])
-
-    if (storageError) {
-      console.warn('Advertencia: No se pudo borrar el archivo físico:', storageError.message)
-    }
-
-    // 2. Borrado Lógico (DB)
-    const { error: dbError } = await supabase
-      .from('conversion_logs')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', logToDelete.id)
-
-    if (dbError) {
-      alert('Error al actualizar registro: ' + dbError.message)
-    } else {
+    const { error: storageError } = await supabase.storage.from('raw-videos').remove([logToDelete.file_path])
+    if (storageError) console.warn(storageError.message)
+    const { error: dbError } = await supabase.from('conversion_logs').update({ deleted_at: new Date().toISOString() }).eq('id', logToDelete.id)
+    if (dbError) alert('Error: ' + dbError.message)
+    else {
       setLogs(logs.filter(l => l.id !== logToDelete.id))
       setIsDeleteModalOpen(false)
       setLogToDelete(null)
     }
   }
 
+
+  if (loading) return <div className="flex h-64 items-center justify-center"><Loader2 className="animate-spin text-vidiooh" size={32} /></div>
+
+  // --- VISTA "PRIVACIDAD LOCAL" (Usuario FREE) ---
+  if (userPlan === 'FREE') {
+    return (
+      <div className="max-w-6xl mx-auto animate-in fade-in duration-500 pb-24 md:pb-0 relative space-y-8">
+        
+        <div className="flex flex-col md:flex-row justify-between items-end gap-4 mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-white mb-1">Tu Historial</h1>
+            <p className="text-slate-400">Archivos y copias de seguridad.</p>
+          </div>
+        </div>
+
+        {/* TARJETA DE PRIVACIDAD / VENTA */}
+        <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-[#0f141c] p-8 md:p-16 text-center">
+            
+            <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-emerald-500/5 to-transparent pointer-events-none" />
+            
+            <div className="relative z-10 flex flex-col items-center max-w-lg mx-auto">
+                {/* Icono de Privacidad */}
+                <div className="w-20 h-20 bg-slate-900 rounded-full flex items-center justify-center mb-6 shadow-xl border border-slate-800 relative">
+                    <CloudOff size={32} className="text-slate-400" />
+                    <div className="absolute -bottom-1 -right-1 bg-emerald-500 rounded-full p-1 border-4 border-[#0f141c]">
+                        <ShieldCheck size={16} className="text-[#0f141c]" />
+                    </div>
+                </div>
+                
+                <h2 className="text-2xl md:text-3xl font-bold text-white mb-4">
+                    Modo Local <span className="text-emerald-500">Activo</span>
+                </h2>
+                
+                <p className="text-slate-400 mb-8 text-lg">
+                    Como usuario Free, tus videos se procesan y eliminan inmediatamente para máxima privacidad. 
+                    <br/><br/>
+                    <span className="text-white font-medium">¿Necesitas copias de seguridad en la nube?</span>
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full mb-8 text-left">
+                    <div className="flex items-center gap-3 p-4 bg-slate-900/50 rounded-xl border border-slate-800">
+                        <div className="p-2 bg-slate-800 rounded-lg"><CloudOff size={16} className="text-emerald-500"/></div>
+                        <div>
+                            <p className="text-xs text-slate-500 uppercase font-bold">Plan Free</p>
+                            <p className="text-sm text-white">Almacenamiento Local (0GB)</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3 p-4 bg-vidiooh/5 rounded-xl border border-vidiooh/20">
+                         <div className="p-2 bg-vidiooh/10 rounded-lg"><Clock size={16} className="text-vidiooh"/></div>
+                         <div>
+                            <p className="text-xs text-vidiooh uppercase font-bold">Plan Pro</p>
+                            <p className="text-sm text-white">Historial en la Nube (7 días)</p>
+                        </div>
+                    </div>
+                </div>
+
+                <Link href="/dashboard/pricing" className="group relative inline-flex items-center justify-center gap-2 px-8 py-4 font-bold text-white transition-all duration-200 bg-vidiooh rounded-xl hover:bg-vidiooh-dark hover:scale-105 shadow-lg shadow-vidiooh/25">
+                    <span>Activar Cloud Backup</span>
+                    <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform"/>
+                </Link>
+                
+                <p className="mt-6 text-xs text-slate-600">
+                    Tu privacidad es primero. Solo subimos archivos si tienes el <span className="text-slate-400">Plan PRO</span> o superior.
+                </p>
+            </div>
+        </div>
+      </div>
+    )
+  }
+
+  // --- VISTA NORMAL (GRID) PARA USUARIOS QUE PAGAN ---
   return (
     <div className="max-w-6xl mx-auto animate-in fade-in duration-500 pb-24 md:pb-0 relative">
       
-      {/* HEADER SIMPLIFICADO */}
-      <div className="mb-6 md:mb-8">
-        <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">Historial Reciente</h1>
-        <p className="text-slate-400 text-sm">Actividad de las últimas 24h</p>
+      {/* HEADER */}
+      <div className="mb-6 md:mb-8 flex flex-col md:flex-row justify-between items-end gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">Historial Cloud</h1>
+          <p className="text-slate-400 text-sm">Tus copias de seguridad seguras.</p>
+        </div>
+        <div className="relative w-full md:w-64 hidden md:block">
+             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500" size={16} />
+             <input type="text" placeholder="Buscar archivo..." className="w-full bg-[#0f141c] border border-slate-800 rounded-lg pl-10 pr-4 py-2 text-sm text-white outline-none focus:border-vidiooh transition-all" />
+        </div>
       </div>
 
-      {/* LISTA DE VIDEOS */}
-      {loading ? (
-        <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-4">
-           <Loader2 className="animate-spin text-vidiooh" size={32} />
-           <p>Cargando historial...</p>
-        </div>
-      ) : (!logs || logs.length === 0) ? (
+      {/* GRID DE VIDEOS */}
+      {(!logs || logs.length === 0) ? (
         <div className="text-center py-20 bg-[#0f141c]/50 rounded-3xl border border-slate-800/50">
           <Clock className="text-slate-500 mx-auto mb-4" size={32} />
-          <h3 className="text-white font-bold text-lg mb-2">Aún no hay historial</h3>
+          <h3 className="text-white font-bold text-lg mb-2">Historial vacío</h3>
+          <p className="text-slate-500 text-sm mb-6">Tus conversiones PRO aparecerán aquí.</p>
           <a href="/dashboard/convert" className="px-6 py-3 bg-vidiooh hover:bg-vidiooh-dark text-white font-bold rounded-xl inline-block transition-colors shadow-lg shadow-vidiooh/20">
             Convertir video
           </a>
@@ -112,60 +225,32 @@ export default function HistoryPage() {
 
             return (
               <div key={log.id} className="group bg-[#0f141c] border border-slate-800 rounded-2xl overflow-hidden hover:border-slate-600 hover:shadow-xl transition-all flex flex-col">
-                
-                {/* PREVISUALIZACIÓN */}
                 <div className="w-full h-48 md:h-40 bg-black relative flex-shrink-0 group-hover:opacity-90 transition-opacity">
-                   <video 
-                     src={`${videoUrl}#t=0.5`} 
-                     className="w-full h-full object-cover" 
-                     preload="none" 
-                     muted 
-                   />
-                   
+                   <video src={`${videoUrl}#t=0.5`} className="w-full h-full object-cover" preload="none" muted />
                    <a href={videoUrl} target="_blank" className="absolute inset-0 flex items-center justify-center bg-black/10 hover:bg-black/30 transition-colors group/play">
                      <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center shadow-lg group-hover/play:scale-110 transition-transform">
                        <PlayCircle className="text-white fill-white/20" size={24} />
                      </div>
                    </a>
-                   
                    <div className="absolute bottom-3 right-3 bg-black/70 text-white text-xs font-bold px-2 py-1 rounded-md backdrop-blur-sm border border-white/10">
                      {log.duration}s
                    </div>
                 </div>
-
-                {/* INFO BODY */}
                 <div className="p-4 flex-1 flex flex-col justify-between gap-3">
                   <div>
                     <h3 className="font-bold text-base text-white mb-2 break-words leading-snug line-clamp-2" title={log.original_name}>
                       {log.original_name.replace('.mp4', '')}
                     </h3>
-                    
                     <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <span className="bg-slate-900 text-vidiooh text-[10px] font-bold px-2 py-1 rounded-md border border-slate-800 whitespace-nowrap">
-                        {resolutionLabel}
-                      </span>
-                      <span className="text-slate-500 text-[10px] truncate">
-                        {timeAgo}
-                      </span>
+                      <span className="bg-slate-900 text-vidiooh text-[10px] font-bold px-2 py-1 rounded-md border border-slate-800 whitespace-nowrap">{resolutionLabel}</span>
+                      <span className="text-slate-500 text-[10px] truncate">{timeAgo}</span>
                     </div>
                   </div>
-
-                  {/* BOTONES */}
                   <div className="flex justify-end gap-3 pt-2 mt-auto border-t border-slate-800/50">
-                      <a 
-                        href={videoUrl} 
-                        target="_blank" 
-                        className="p-2.5 bg-vidiooh/10 text-vidiooh rounded-xl hover:bg-vidiooh hover:text-white transition-colors active:scale-95 border border-vidiooh/20 hover:border-vidiooh"
-                        title="Descargar"
-                      >
+                      <a href={videoUrl} target="_blank" className="p-2.5 bg-vidiooh/10 text-vidiooh rounded-xl hover:bg-vidiooh hover:text-white transition-colors border border-vidiooh/20 hover:border-vidiooh">
                         <Download size={18} />
                       </a>
-                      
-                      <button 
-                        onClick={() => confirmDelete(log)} 
-                        className="p-2.5 bg-slate-800 text-slate-400 rounded-xl hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/50 border border-transparent transition-all active:scale-95"
-                        title="Eliminar"
-                      >
+                      <button onClick={() => confirmDelete(log)} className="p-2.5 bg-slate-800 text-slate-400 rounded-xl hover:bg-red-500/10 hover:text-red-500 border border-transparent transition-all">
                         <Trash2 size={18} />
                       </button>
                   </div>
@@ -183,13 +268,11 @@ export default function HistoryPage() {
             <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/20">
               <AlertTriangle className="text-red-500" size={32} />
             </div>
-            <h2 className="text-xl font-bold text-white mb-2">¿Borrar video?</h2>
-            <p className="text-slate-400 text-sm mb-6 break-words">
-              Se eliminará <span className="text-white font-medium">"{logToDelete?.original_name}"</span> permanentemente.
-            </p>
+            <h2 className="text-xl font-bold text-white mb-2">¿Borrar del Cloud?</h2>
+            <p className="text-slate-400 text-sm mb-6">Esta acción no se puede deshacer.</p>
             <div className="flex gap-3">
-              <button onClick={() => setIsDeleteModalOpen(false)} className="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-medium py-3 rounded-xl transition-colors border border-slate-700">Cancelar</button>
-              <button onClick={handleDelete} className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl shadow-lg shadow-red-500/20 transition-colors">Sí, eliminar</button>
+              <button onClick={() => setIsDeleteModalOpen(false)} className="flex-1 bg-slate-800 text-white font-medium py-3 rounded-xl border border-slate-700">Cancelar</button>
+              <button onClick={handleDelete} className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl">Sí, eliminar</button>
             </div>
           </div>
         </div>

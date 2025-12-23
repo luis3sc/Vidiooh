@@ -1,46 +1,60 @@
 'use client'
 
 import React from 'react'
+import { usePathname } from 'next/navigation'
 import BottomNav from '../../components/ui/BottomNav'
 import TopNav from '../../components/ui/TopNav'
+// Asegúrate que esta ruta sea correcta hacia el archivo que acabamos de crear arriba
+import { useBlockCheck } from '../../hooks/useBlockCheck'
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const pathname = usePathname()
+
+  // 🛡️ GUARDIA DE SEGURIDAD
+  // Se ejecuta automáticamente al montar el layout.
+  // Protege /convert, /history, /pricing, /formats, etc.
+  useBlockCheck()
+
+  // 1. DETECTAR SI ESTAMOS EN EL ADMIN
+  const isAdminRoute = pathname?.startsWith('/dashboard/admin')
+
+  // 2. SI ES ADMIN, RENDERIZAR "LIMPIO"
+  if (isAdminRoute) {
+    return <>{children}</>
+  }
+
+  // 3. SI ES USUARIO NORMAL, RENDERIZAR LA INTERFAZ COMPLETA
   return (
-    // CAMBIO: Fondo alineado con Landing Page (#020617)
     <div className="min-h-screen bg-[#020617] text-slate-200 flex flex-col">
       
-      {/* 1. Barra Superior (Solo visible en PC) */}
+      {/* Barra Superior */}
       <TopNav />
       
-      {/* 2. Contenedor Principal */}
+      {/* Contenedor Principal */}
       <main className={`
         flex-1 w-full max-w-7xl mx-auto flex flex-col
-        px-4 md:px-8          /* Padding lateral */
-        pt-8 md:pt-28         /* Padding superior (Mobile 2rem / PC con espacio para barra) */
-        mb-20 md:mb-0         /* 👈 CAMBIO: Aumenté un poco el margen móvil para evitar solapamiento */
-        md:pb-12              /* Padding bottom solo en PC */
+        px-4 md:px-8          
+        pt-8 md:pt-28         
+        mb-20 md:mb-0         
+        md:pb-12              
       `}>
-        
-        {/* Contenido de la página */}
-        <div className="flex-1">
+        <div className="flex-1 animate-in fade-in duration-300">
           {children}
         </div>
 
-        {/* 3. Footer: Oculto en Móvil, Visible en PC */}
-        {/* CAMBIO: Borde más sutil y colores de marca */}
+        {/* Footer */}
         <div className="hidden md:block mt-12 py-8 border-t border-white/5 text-center">
           <p className="text-[10px] text-slate-600 uppercase tracking-[0.2em] font-semibold cursor-default">
-            Powered by <span className="text-slate-500 font-bold hover:text-vidiooh transition-colors">Aullyk</span>
+            Powered by <span className="text-slate-500 font-bold hover:text-vidiooh transition-colors">Aylluk</span>
           </p>
         </div>
-
       </main>
 
-      {/* 4. Barra Inferior (Solo visible en Móvil) */}
+      {/* Barra Inferior */}
       <BottomNav />
     </div>
   )
