@@ -5,8 +5,10 @@ import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
 import { 
   User, Mail, Shield, LogOut, HardDrive, 
-  Activity, Crown, Zap, Loader2, Building2 
+  Activity, Crown, Zap, Loader2, Building2, CalendarDays 
 } from 'lucide-react'
+import { format } from 'date-fns'
+import { es } from 'date-fns/locale'
 
 export default function AccountPage() {
   const router = useRouter()
@@ -22,6 +24,8 @@ export default function AccountPage() {
   const [userId, setUserId] = useState('')
   const [companyName, setCompanyName] = useState('Freelance / Independiente') 
   const [userPlan, setUserPlan] = useState('FREE') 
+  // NUEVO: Estado para la fecha de expiración
+  const [planExpiresAt, setPlanExpiresAt] = useState<string | null>(null)
 
   // Estadísticas
   const [monthlyVideos, setMonthlyVideos] = useState(0)
@@ -48,7 +52,7 @@ export default function AccountPage() {
     setUserEmail(user.email || '')
     setUserId(user.id)
 
-    // 2. Obtener Perfil
+    // 2. Obtener Perfil (Traemos todo, incluyendo plan_expires_at)
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('*')
@@ -57,6 +61,11 @@ export default function AccountPage() {
 
     if (profileError) {
        console.error("Error al cargar perfil:", profileError.message)
+    }
+
+    // Guardamos la fecha de expiración si existe en el perfil individual
+    if (profile) {
+        setPlanExpiresAt(profile.plan_expires_at)
     }
 
     // 3. Obtener Equipo / Plan
@@ -71,10 +80,13 @@ export default function AccountPage() {
             setCompanyName(team.name)
             // @ts-ignore
             setUserPlan(team.plan_type?.toUpperCase() || 'FREE')
+            // Si es equipo, la expiración individual a veces no importa, 
+            // pero la dejamos por si acaso el usuario quiere verla.
         }
     } else {
         setCompanyName('Freelance / Independiente')
-        setUserPlan('FREE')
+        // Si no tiene equipo, usamos su plan individual
+        setUserPlan(profile?.plan_type || 'FREE')
     }
     
     // 4. Calcular Estadísticas
@@ -130,7 +142,6 @@ export default function AccountPage() {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        {/* CAMBIO: Loader naranja */}
         <Loader2 className="animate-spin text-vidiooh" size={32} />
       </div>
     )
@@ -150,27 +161,21 @@ export default function AccountPage() {
         <div className="lg:col-span-2 space-y-6">
           
           {/* Tarjeta de Datos Personales */}
-          {/* CAMBIO: bg-[#0f141c] */}
           <div className="bg-[#0f141c] border border-slate-800 rounded-2xl p-6">
             <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-2">
-              {/* CAMBIO: text-vidiooh */}
               <User size={20} className="text-vidiooh" /> Información Personal
             </h3>
 
             <div className="space-y-4">
               
-              {/* CAMPO: EMPRESA */}
               <div className="space-y-2">
-                {/* CAMBIO: text-vidiooh */}
                 <label className="text-xs font-bold text-vidiooh uppercase ml-1">Empresa / Organización</label>
                 <div className="relative">
-                  {/* CAMBIO: Icono naranja */}
                   <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-vidiooh" size={18} />
                   <input 
                     type="text" 
                     value={companyName} 
                     disabled 
-                    // CAMBIO: border-vidiooh/30 y background ajustado
                     className="w-full bg-[#151921] border border-vidiooh/30 rounded-xl pl-12 pr-4 py-3 text-white font-bold cursor-not-allowed select-none"
                   />
                 </div>
@@ -210,7 +215,6 @@ export default function AccountPage() {
           {/* Tarjeta de Seguridad */}
           <div className="bg-[#0f141c] border border-slate-800 rounded-2xl p-6">
             <h3 className="text-white font-bold text-lg mb-4 flex items-center gap-2">
-              {/* CAMBIO: text-vidiooh */}
               <Shield size={20} className="text-vidiooh" /> Seguridad
             </h3>
             
@@ -226,17 +230,14 @@ export default function AccountPage() {
               </div>
             ) : (
               <div className="bg-[#151921] p-4 rounded-xl border border-slate-800">
-                  {/* CAMBIO: text-vidiooh */}
                   <label className="text-xs font-bold text-vidiooh uppercase mb-2 block">Nueva Contraseña</label>
                   <input 
                     type="password" 
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    // CAMBIO: focus:ring-vidiooh
                     className="w-full bg-[#0f141c] border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-vidiooh outline-none mb-4"
                   />
                   <div className="flex gap-3">
-                    {/* CAMBIO: bg-vidiooh */}
                     <button onClick={handleChangePassword} disabled={passLoading} className="flex-1 bg-vidiooh hover:bg-vidiooh-dark text-black font-bold py-2 rounded-lg">
                       {passLoading ? 'Actualizando...' : 'Guardar Nueva'}
                     </button>
@@ -251,26 +252,57 @@ export default function AccountPage() {
         <div className="space-y-6">
           
           {/* Tarjeta de Plan DINÁMICA */}
-          {/* CAMBIO: Gradiente naranja (vidiooh) */}
           <div className="bg-gradient-to-br from-vidiooh/20 to-[#0f141c] border border-vidiooh/30 rounded-2xl p-6 relative overflow-hidden group">
             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
               <Crown size={100} className="text-vidiooh" />
             </div>
             
             <div className="flex items-center gap-2 mb-2">
-              {/* CAMBIO: Badge naranja si es PRO/CORP */}
               <span className={`text-[10px] font-black px-2 py-1 rounded-full uppercase tracking-widest ${userPlan === 'PRO' || userPlan === 'CORPORATE' ? 'bg-vidiooh text-black' : 'bg-slate-600 text-white'}`}>
                 Plan Actual
               </span>
             </div>
-            <h2 className="text-3xl font-bold text-white mb-1">{userPlan === 'CORPORATE' ? 'EMPRESAS' : userPlan}</h2>
-            {/* CAMBIO: text-vidiooh */}
-            <p className="text-vidiooh text-sm mb-6">
+            
+            <h2 className="text-3xl font-bold text-white mb-1">
+                {userPlan === 'CORPORATE' ? 'EMPRESAS' : userPlan}
+            </h2>
+            
+            <p className="text-vidiooh text-sm mb-6 font-medium">
               {userPlan === 'FREE' ? 'Cuenta Gratuita' : userPlan === 'CORPORATE' ? 'Plan Corporativo Activo' : 'Suscripción Profesional'}
             </p>
             
-            <button className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 rounded-xl text-sm font-medium transition-colors cursor-not-allowed">
-              Gestionar Suscripción
+            {/* LÓGICA DE VENCIMIENTO */}
+            {userPlan === 'FREE' ? (
+                <div className="mb-6 p-3 bg-white/5 rounded-lg border border-white/5">
+                    <p className="text-xs text-slate-400">Estado:</p>
+                    <p className="text-white font-bold text-sm flex items-center gap-2">
+                        <Activity size={14} className="text-emerald-500"/> Siempre Activo
+                    </p>
+                </div>
+            ) : userPlan === 'CORPORATE' ? (
+                <div className="mb-6 p-3 bg-vidiooh/10 rounded-lg border border-vidiooh/20">
+                    <p className="text-xs text-vidiooh/70">Renovación:</p>
+                    <p className="text-white font-bold text-sm flex items-center gap-2">
+                        <Building2 size={14} className="text-vidiooh"/> Gestionada por Empresa
+                    </p>
+                </div>
+            ) : planExpiresAt ? (
+                <div className="mb-6 p-3 bg-vidiooh/10 rounded-lg border border-vidiooh/20">
+                    <p className="text-xs text-vidiooh/70">Próxima renovación:</p>
+                    <p className="text-white font-bold text-sm flex items-center gap-2">
+                        <CalendarDays size={14} className="text-vidiooh"/> 
+                        {format(new Date(planExpiresAt), "d 'de' MMMM, yyyy", { locale: es })}
+                    </p>
+                </div>
+            ) : (
+                <div className="mb-6 h-12"></div> // Espaciador
+            )}
+
+            <button 
+                onClick={() => router.push('/dashboard/pricing')}
+                className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-slate-300 hover:text-white rounded-xl text-sm font-medium transition-colors"
+            >
+              {userPlan === 'FREE' ? 'Mejorar Plan' : 'Ver Planes'}
             </button>
           </div>
 
@@ -278,7 +310,6 @@ export default function AccountPage() {
           <div className="bg-[#0f141c] border border-slate-800 rounded-2xl p-6">
             
             <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-2">
-              {/* CAMBIO: text-vidiooh */}
               <Activity size={20} className="text-vidiooh" /> Uso este Mes
             </h3>
             
@@ -286,11 +317,15 @@ export default function AccountPage() {
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-slate-400 flex items-center gap-2"><Zap size={14} /> Videos Convertidos</span>
-                  <span className="text-white font-mono">{monthlyVideos} / {userPlan === 'FREE' ? '6' : '∞'}</span>
+                  <span className="text-white font-mono">{monthlyVideos} / {userPlan === 'FREE' ? '6' : userPlan === 'PRO' ? '45' : '∞'}</span>
                 </div>
                 <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                  {/* CAMBIO: Barra de progreso naranja */}
-                  <div className="h-full bg-vidiooh rounded-full" style={{ width: `${Math.min((monthlyVideos / (userPlan === 'FREE' ? 6 : 100)) * 100, 100)}%` }} />
+                  <div 
+                    className="h-full bg-vidiooh rounded-full transition-all duration-500" 
+                    style={{ 
+                        width: `${Math.min((monthlyVideos / (userPlan === 'FREE' ? 6 : userPlan === 'PRO' ? 45 : 100)) * 100, 100)}%` 
+                    }} 
+                  />
                 </div>
               </div>
               <div>
@@ -299,8 +334,7 @@ export default function AccountPage() {
                   <span className="text-white font-mono">{formatBytes(totalStorage)}</span>
                 </div>
                 <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                   {/* CAMBIO: Barra de progreso también naranja (coherencia de marca) */}
-                   <div className="h-full bg-vidiooh rounded-full" style={{ width: '10%' }} /> 
+                   <div className="h-full bg-vidiooh rounded-full" style={{ width: '5%' }} /> 
                 </div>
               </div>
             </div>

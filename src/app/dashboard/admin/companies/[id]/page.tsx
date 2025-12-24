@@ -4,10 +4,10 @@ import React, { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { 
   ArrowLeft, Building2, Users, Video, HardDrive, Calendar, 
-  Settings, Save, X, Loader2, Clock 
+  Settings, Save, X, Loader2, Clock, RotateCcw 
 } from 'lucide-react'
 import { createClient } from '../../../../../lib/supabase/client'
-import { format, addDays } from 'date-fns' // Importamos addDays
+import { format, addDays, addMonths, formatDistanceToNow } from 'date-fns' 
 import { es } from 'date-fns/locale'
 
 export default function CompanyDetailPage() {
@@ -28,7 +28,8 @@ export default function CompanyDetailPage() {
     name: '',
     plan_type: '',
     max_users: 1,
-    trial_ends_at: null as string | null // Nuevo campo fecha
+    trial_ends_at: null as string | null,
+    plan_expires_at: null as string | null // NUEVO CAMPO EMPRESARIAL
   })
 
   useEffect(() => {
@@ -42,7 +43,8 @@ export default function CompanyDetailPage() {
             name: company.name,
             plan_type: company.plan_type,
             max_users: company.max_users,
-            trial_ends_at: company.trial_ends_at
+            trial_ends_at: company.trial_ends_at,
+            plan_expires_at: company.plan_expires_at
         })
     }
   }, [company])
@@ -51,25 +53,48 @@ export default function CompanyDetailPage() {
   const handlePlanChange = (newPlan: string) => {
     let newMaxUsers = formData.max_users
     let newTrialDate = formData.trial_ends_at
+    let newExpireDate = formData.plan_expires_at
 
     // Reglas de negocio
     if (newPlan === 'FREE' || newPlan === 'PRO') {
-        newMaxUsers = 1 // Free y Pro son individuales
-        newTrialDate = null // No tienen vencimiento
+        newMaxUsers = 1 
+        newTrialDate = null 
+        newExpireDate = null
     } else if (newPlan === 'TRIAL') {
-        // Si cambia a Trial, setear 30 días desde hoy por defecto
         newTrialDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+        newExpireDate = null
     } else if (newPlan === 'CORPORATE') {
-        newTrialDate = null // Corporativo es contrato indefinido usualmente
-        // Max users se mantiene o el usuario lo edita
+        newTrialDate = null 
+        // Corporate mantiene su fecha de expiración si ya tenía, o null si es indefinido
     }
 
     setFormData({
         ...formData,
         plan_type: newPlan,
         max_users: newMaxUsers,
-        trial_ends_at: newTrialDate
+        trial_ends_at: newTrialDate,
+        plan_expires_at: newExpireDate
     })
+  }
+
+  // --- BOTONES MÁGICOS DE TIEMPO ---
+  const applyDuration = (amount: number, unit: 'days' | 'months' | 'years') => {
+      const now = new Date()
+      let newDate = now
+
+      if (unit === 'days') newDate = addDays(now, amount)
+      if (unit === 'months') newDate = addMonths(now, amount)
+      if (unit === 'years') newDate = addMonths(now, amount * 12)
+
+      if (formData.plan_type === 'TRIAL') {
+          setFormData({ ...formData, trial_ends_at: newDate.toISOString() })
+      } else {
+          setFormData({ ...formData, plan_expires_at: newDate.toISOString() })
+      }
+  }
+
+  const setIndefinite = () => {
+      setFormData({ ...formData, plan_expires_at: null, trial_ends_at: null })
   }
 
   const fetchCompanyDetails = async () => {
@@ -130,7 +155,8 @@ export default function CompanyDetailPage() {
                 name: formData.name,
                 plan_type: formData.plan_type,
                 max_users: formData.max_users,
-                trial_ends_at: formData.trial_ends_at
+                trial_ends_at: formData.trial_ends_at,
+                plan_expires_at: formData.plan_expires_at // Guardamos la expiración del contrato
             })
             .eq('id', company.id)
 
@@ -156,9 +182,11 @@ export default function CompanyDetailPage() {
 
   if (loading) return <div className="flex h-64 items-center justify-center"><Loader2 className="animate-spin text-vidiooh" size={32}/></div>
 
-  // Calcular días restantes si es Trial
-  const daysLeft = company?.plan_type === 'TRIAL' && company?.trial_ends_at 
-    ? Math.ceil((new Date(company.trial_ends_at).getTime() - new Date().getTime()) / (1000 * 3600 * 24))
+  // Calcular días restantes (Trial o Contrato)
+  const expirationDate = company?.plan_type === 'TRIAL' ? company?.trial_ends_at : company?.plan_expires_at
+  
+  const daysLeft = expirationDate 
+    ? Math.ceil((new Date(expirationDate).getTime() - new Date().getTime()) / (1000 * 3600 * 24))
     : null;
 
   return (
@@ -167,7 +195,7 @@ export default function CompanyDetailPage() {
       {/* --- MODAL DE EDICIÓN --- */}
       {isEditing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-[#0f141c] border border-slate-700 w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
+            <div className="bg-[#0f141c] border border-slate-700 w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center mb-2">
                     <h3 className="text-xl font-bold text-white">Configurar Empresa</h3>
                     <button onClick={() => setIsEditing(false)} className="text-slate-400 hover:text-white"><X size={24}/></button>
@@ -199,15 +227,52 @@ export default function CompanyDetailPage() {
                         </select>
                     </div>
 
-                    {/* Si es TRIAL mostramos la fecha de fin */}
-                    {formData.plan_type === 'TRIAL' && (
-                        <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                            <label className="text-xs text-yellow-500 font-bold uppercase mb-1 block">Vence el:</label>
+                    {/* CONFIGURACIÓN DE VIGENCIA */}
+                    {(formData.plan_type === 'TRIAL' || formData.plan_type === 'CORPORATE') && (
+                        <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800">
+                            <div className="flex justify-between items-end mb-3">
+                                <label className="text-xs text-slate-400 font-bold uppercase flex items-center gap-1">
+                                    <Calendar size={12}/> {formData.plan_type === 'TRIAL' ? 'Fin de Prueba' : 'Vencimiento Contrato'}
+                                </label>
+                                <span className="text-xs font-mono text-emerald-400">
+                                    {formData.plan_type === 'TRIAL' 
+                                        ? (formData.trial_ends_at ? format(new Date(formData.trial_ends_at), "dd/MM/yyyy") : 'Sin fecha')
+                                        : (formData.plan_expires_at ? format(new Date(formData.plan_expires_at), "dd/MM/yyyy") : '∞ Indefinido')
+                                    }
+                                </span>
+                            </div>
+
+                            {/* BOTONES MÁGICOS */}
+                            <div className="grid grid-cols-4 gap-2 mb-3">
+                                {formData.plan_type === 'TRIAL' ? (
+                                    <>
+                                        <button onClick={() => applyDuration(15, 'days')} className="bg-slate-800 hover:bg-vidiooh hover:text-black text-white text-xs py-2 rounded transition-colors">+15 Días</button>
+                                        <button onClick={() => applyDuration(30, 'days')} className="bg-slate-800 hover:bg-vidiooh hover:text-black text-white text-xs py-2 rounded transition-colors">+30 Días</button>
+                                        <button onClick={setIndefinite} className="col-span-2 bg-slate-800 hover:text-red-400 text-slate-400 text-xs py-2 rounded transition-colors"><RotateCcw size={14} className="mx-auto"/></button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <button onClick={() => applyDuration(1, 'months')} className="bg-slate-800 hover:bg-vidiooh hover:text-black text-white text-xs py-2 rounded transition-colors">+1 Mes</button>
+                                        <button onClick={() => applyDuration(6, 'months')} className="bg-slate-800 hover:bg-vidiooh hover:text-black text-white text-xs py-2 rounded transition-colors">+6 M</button>
+                                        <button onClick={() => applyDuration(1, 'years')} className="bg-slate-800 hover:bg-vidiooh hover:text-black text-white text-xs py-2 rounded transition-colors">+1 Año</button>
+                                        <button onClick={setIndefinite} className="bg-slate-800 hover:bg-emerald-500 hover:text-white text-emerald-500 text-xs py-2 rounded transition-colors border border-emerald-500/20">∞</button>
+                                    </>
+                                )}
+                            </div>
+
                             <input 
                                 type="date" 
-                                value={formData.trial_ends_at ? formData.trial_ends_at.split('T')[0] : ''}
-                                onChange={(e) => setFormData({...formData, trial_ends_at: e.target.value})}
-                                className="w-full bg-transparent text-white font-mono text-sm outline-none"
+                                value={
+                                    formData.plan_type === 'TRIAL' 
+                                    ? (formData.trial_ends_at ? formData.trial_ends_at.split('T')[0] : '')
+                                    : (formData.plan_expires_at ? formData.plan_expires_at.split('T')[0] : '')
+                                }
+                                onChange={(e) => {
+                                    const val = e.target.value ? new Date(e.target.value).toISOString() : null
+                                    if(formData.plan_type === 'TRIAL') setFormData({...formData, trial_ends_at: val})
+                                    else setFormData({...formData, plan_expires_at: val})
+                                }}
+                                className="w-full bg-[#0f141c] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-vidiooh"
                             />
                         </div>
                     )}
@@ -274,10 +339,17 @@ export default function CompanyDetailPage() {
                             {company?.plan_type}
                         </span>
                         
-                        {/* Info de Trial si existe */}
-                        {daysLeft !== null && (
-                            <span className={`text-xs flex items-center gap-1 font-bold ${daysLeft > 0 ? 'text-slate-400' : 'text-red-500'}`}>
-                                <Clock size={12}/> {daysLeft > 0 ? `${daysLeft} días restantes` : 'EXPIRADO'}
+                        {/* Info de Vencimiento */}
+                        {expirationDate ? (
+                            <span className={`text-xs flex items-center gap-1 font-bold ${daysLeft !== null && daysLeft > 0 ? 'text-slate-400' : 'text-red-500'}`}>
+                                <Clock size={12}/> 
+                                {daysLeft !== null && daysLeft > 0 
+                                    ? `Vence en ${daysLeft} días (${format(new Date(expirationDate), 'dd/MM/yyyy')})` 
+                                    : 'EXPIRADO'}
+                            </span>
+                        ) : (
+                            <span className="text-xs flex items-center gap-1 font-bold text-slate-500 italic">
+                                <Clock size={12}/> Indefinido
                             </span>
                         )}
 

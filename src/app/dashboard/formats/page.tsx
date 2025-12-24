@@ -112,26 +112,26 @@ export default function FormatsPage() {
     const rawW = parseInt(inputW)
     const rawH = parseInt(inputH)
     
-    // FFmpeg requiere pares
-    const safeW = rawW % 2 === 0 ? rawW : rawW - 1
-    const safeH = rawH % 2 === 0 ? rawH : rawH - 1
-
+    // --- CAMBIO IMPORTANTE: NO CORREGIMOS AQUI ---
+    // Guardamos el número exacto que puso el usuario (aunque sea impar).
+    // La corrección -1px se hace silenciosamente en el motor de conversión.
+    
     const displayName = inputName.trim() !== '' 
         ? inputName.trim() 
-        : `Formato ${safeW}x${safeH}`
+        : `Formato ${rawW}x${rawH}` // Usamos rawW/rawH para el nombre
 
     if (editingId) {
       await supabase
         .from('custom_formats')
-        .update({ width: safeW, height: safeH, label: displayName })
+        .update({ width: rawW, height: rawH, label: displayName }) // Guardamos valor crudo
         .eq('id', editingId)
     } else {
       await supabase
         .from('custom_formats')
         .insert({
           user_id: user.id,
-          width: safeW,
-          height: safeH,
+          width: rawW, // Guardamos valor crudo
+          height: rawH, 
           label: displayName
         })
     }
@@ -156,7 +156,6 @@ export default function FormatsPage() {
             <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">Mis Formatos</h1>
             <p className="text-slate-400 text-sm flex items-center gap-2">
                 Gestiona tus pantallas 
-                {/* 5. MOSTRAR LÍMITE DINÁMICO EN EL TEXTO */}
                 <span className={`px-2 py-0.5 rounded text-xs font-bold ${isLimitReached ? 'bg-red-500/20 text-red-400' : 'bg-slate-800 text-slate-300'}`}>
                     {formats.length} / {currentPlan === 'CORPORATE' ? '∞' : maxFormats} utilizados
                 </span>

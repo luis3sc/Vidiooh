@@ -1,19 +1,20 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { Search, Filter, Shield, User, Building2, CheckCircle2, Mail, Loader2, Edit2, X, Save, Ban, AlertCircle } from 'lucide-react'
+import { Search, Filter, Shield, User, Building2, CheckCircle2, Mail, Loader2, Edit2, X, Save, Ban, Calendar, Clock, RotateCcw } from 'lucide-react'
 import { createClient } from '../../../../lib/supabase/client'
-import { formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNow, addMonths, addDays, format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 type UserProfile = {
   id: string
   email: string
   role: string
-  status: string // 'active' | 'banned'
+  status: string 
   created_at: string
   plan_type: string
   trial_ends_at: string | null
+  plan_expires_at: string | null 
   team_id: string | null
   teams: {
     name: string
@@ -30,11 +31,13 @@ export default function UsersPage() {
   // --- ESTADOS PARA EDICIÓN ---
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null)
   const [saving, setSaving] = useState(false)
+  
   const [formData, setFormData] = useState({
     role: 'user',
-    status: 'active', // Nuevo campo estado
+    status: 'active',
     plan_type: 'FREE',
-    trial_ends_at: null as string | null
+    trial_ends_at: null as string | null,
+    plan_expires_at: null as string | null
   })
 
   useEffect(() => {
@@ -69,10 +72,32 @@ export default function UsersPage() {
     setEditingUser(user)
     setFormData({
         role: user.role,
-        status: user.status || 'active', // Cargar estado actual
+        status: user.status || 'active',
         plan_type: user.plan_type || 'FREE',
-        trial_ends_at: user.trial_ends_at
+        trial_ends_at: user.trial_ends_at,
+        plan_expires_at: user.plan_expires_at
     })
+  }
+
+  // --- LOGICA DE BOTONES MÁGICOS ---
+  const applyDuration = (amount: number, unit: 'days' | 'months' | 'years') => {
+      const now = new Date()
+      let newDate = now
+
+      if (unit === 'days') newDate = addDays(now, amount)
+      if (unit === 'months') newDate = addMonths(now, amount)
+      if (unit === 'years') newDate = addMonths(now, amount * 12)
+
+      // Aplicar a la fecha correcta según el plan seleccionado
+      if (formData.plan_type === 'TRIAL') {
+          setFormData({ ...formData, trial_ends_at: newDate.toISOString() })
+      } else {
+          setFormData({ ...formData, plan_expires_at: newDate.toISOString() })
+      }
+  }
+
+  const setIndefinite = () => {
+      setFormData({ ...formData, plan_expires_at: null, trial_ends_at: null })
   }
 
   // Guardar Cambios
@@ -80,36 +105,43 @@ export default function UsersPage() {
     if (!editingUser) return
     setSaving(true)
     try {
+        // Limpieza de datos antes de enviar
+        const updates: any = {
+            role: formData.role,
+            status: formData.status,
+            plan_type: formData.plan_type,
+        }
+
+        // Si es FREE, limpiamos fechas
+        if (formData.plan_type === 'FREE') {
+            updates.trial_ends_at = null
+            updates.plan_expires_at = null
+        } 
+        // Si es TRIAL
+        else if (formData.plan_type === 'TRIAL') {
+            updates.trial_ends_at = formData.trial_ends_at
+            updates.plan_expires_at = null
+        } 
+        // Si es PRO
+        else if (formData.plan_type === 'PRO') {
+            updates.trial_ends_at = null
+            updates.plan_expires_at = formData.plan_expires_at
+        }
+
         const { error } = await supabase
             .from('profiles')
-            .update({
-                role: formData.role,
-                status: formData.status, // Guardar estado
-                plan_type: formData.plan_type,
-                trial_ends_at: formData.trial_ends_at
-            })
+            .update(updates)
             .eq('id', editingUser.id)
 
         if (error) throw error
         
         await fetchUsers() 
         setEditingUser(null) 
-        alert("Usuario actualizado correctamente")
     } catch (error: any) {
         alert("Error: " + error.message)
     } finally {
         setSaving(false)
     }
-  }
-
-  const handlePlanChange = (newPlan: string) => {
-    let newDate = formData.trial_ends_at
-    if (newPlan === 'TRIAL') {
-        newDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-    } else {
-        newDate = null
-    }
-    setFormData({ ...formData, plan_type: newPlan, trial_ends_at: newDate })
   }
 
   const filteredUsers = users.filter(u => 
@@ -124,126 +156,162 @@ export default function UsersPage() {
       {/* --- MODAL DE EDICIÓN --- */}
       {editingUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-[#0f141c] border border-slate-700 w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
-                <div className="flex justify-between items-center mb-2">
-                    <h3 className="text-xl font-bold text-white">Editar Usuario</h3>
-                    <button onClick={() => setEditingUser(null)} className="text-slate-400 hover:text-white"><X size={24}/></button>
+            <div className="bg-[#0f141c] border border-slate-700 w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-5 overflow-y-auto max-h-[90vh]">
+                
+                <div className="flex justify-between items-center border-b border-slate-800 pb-4">
+                    <div>
+                        <h3 className="text-xl font-bold text-white">Editar Usuario</h3>
+                        <p className="text-xs text-slate-400">{editingUser.email}</p>
+                    </div>
+                    <button onClick={() => setEditingUser(null)} className="text-slate-400 hover:text-white bg-slate-800 p-2 rounded-full"><X size={20}/></button>
                 </div>
                 
-                <div className="p-3 bg-slate-800/50 rounded-lg mb-4 flex justify-between items-center">
-                    <div>
-                        <p className="text-xs text-slate-400 uppercase font-bold">Cuenta</p>
-                        <p className="text-white font-medium">{editingUser.email}</p>
-                    </div>
-                    {/* Badge de Estado actual en el header del usuario */}
-                    {formData.status === 'banned' ? (
-                        <span className="px-2 py-1 bg-red-500/20 text-red-500 text-xs font-bold rounded border border-red-500/50 flex items-center gap-1">
-                            <Ban size={12}/> BLOQUEADO
-                        </span>
-                    ) : (
-                        <span className="px-2 py-1 bg-emerald-500/20 text-emerald-500 text-xs font-bold rounded border border-emerald-500/50 flex items-center gap-1">
-                            <CheckCircle2 size={12}/> ACTIVO
-                        </span>
-                    )}
-                </div>
-
-                {/* --- SECCIÓN CRÍTICA: ESTADO DE ACCESO --- */}
-                <div className="border-b border-slate-800 pb-4 mb-4">
-                    <label className="text-xs text-slate-500 font-bold uppercase mb-2 block">Estado de Acceso</label>
-                    <div className="grid grid-cols-2 gap-3">
-                        <button
-                            onClick={() => setFormData({...formData, status: 'active'})}
-                            className={`p-3 rounded-xl border flex items-center justify-center gap-2 transition-all ${
+                <div className="grid grid-cols-2 gap-4">
+                    {/* ESTADO */}
+                    <div className="space-y-2">
+                        <label className="text-xs text-slate-500 font-bold uppercase block">Acceso</label>
+                        <select 
+                            value={formData.status}
+                            onChange={(e) => setFormData({...formData, status: e.target.value})}
+                            className={`w-full border rounded-lg px-3 py-2.5 text-sm outline-none font-bold ${
                                 formData.status === 'active' 
-                                ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' 
-                                : 'bg-slate-900 border-slate-700 text-slate-500 hover:border-slate-600'
+                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500' 
+                                : 'bg-red-500/10 border-red-500/30 text-red-500'
                             }`}
                         >
-                            <CheckCircle2 size={18} /> Activo
-                        </button>
-                        <button
-                            onClick={() => setFormData({...formData, status: 'banned'})}
-                            className={`p-3 rounded-xl border flex items-center justify-center gap-2 transition-all ${
-                                formData.status === 'banned' 
-                                ? 'bg-red-500/10 border-red-500 text-red-500' 
-                                : 'bg-slate-900 border-slate-700 text-slate-500 hover:border-slate-600'
-                            }`}
-                        >
-                            <Ban size={18} /> Bloquear
-                        </button>
+                            <option value="active">ACTIVO</option>
+                            <option value="banned">BLOQUEADO</option>
+                        </select>
                     </div>
-                    <p className="text-[10px] text-slate-500 mt-2">
-                        * Los usuarios bloqueados no podrán iniciar sesión ni convertir videos.
-                    </p>
+
+                    {/* ROL */}
+                    <div className="space-y-2">
+                        <label className="text-xs text-slate-500 font-bold uppercase block">Rol</label>
+                        <select 
+                            value={formData.role}
+                            onChange={(e) => setFormData({...formData, role: e.target.value})}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:border-vidiooh outline-none"
+                        >
+                            <option value="user">Usuario</option>
+                            <option value="admin">Administrador</option>
+                        </select>
+                    </div>
                 </div>
 
-                {/* PLAN (Solo freelance) */}
+                <div className="border-t border-slate-800 my-2"></div>
+
+                {/* --- SECCIÓN SUSCRIPCIÓN --- */}
                 {editingUser.team_id ? (
-                    <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg flex gap-3 items-start">
-                        <Building2 className="text-blue-500 shrink-0" size={20}/>
+                    <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl flex gap-4 items-center">
+                        <Building2 className="text-blue-500 shrink-0" size={24}/>
                         <div>
-                            <p className="text-sm text-blue-400 font-bold">Usuario Corporativo</p>
-                            <p className="text-xs text-slate-400 mt-1">Gestionado por <strong>{editingUser.teams?.name}</strong>.</p>
+                            <p className="text-sm text-blue-400 font-bold uppercase tracking-wide">Gestionado por Empresa</p>
+                            <p className="text-xs text-slate-300 mt-1">
+                                Este usuario pertenece a <strong>{editingUser.teams?.name}</strong>. 
+                                <br/>Edita la empresa para cambiar permisos globales.
+                            </p>
                         </div>
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        <div>
-                            <label className="text-xs text-slate-500 font-bold uppercase mb-1 block">Plan Individual</label>
-                            <select 
-                                value={formData.plan_type}
-                                onChange={(e) => handlePlanChange(e.target.value)}
-                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-vidiooh outline-none"
-                            >
-                                <option value="FREE">FREE</option>
-                                <option value="PRO">PRO</option>
-                                <option value="TRIAL">TRIAL (30 días)</option>
-                            </select>
+                        <div className="flex justify-between items-center">
+                            <label className="text-xs text-vidiooh font-bold uppercase flex items-center gap-2">
+                                <Shield size={14}/> Suscripción Individual
+                            </label>
                         </div>
-                        {formData.plan_type === 'TRIAL' && (
-                             <div>
-                                <label className="text-xs text-yellow-500 font-bold uppercase mb-1 block">Fin de Prueba</label>
-                                <input 
-                                    type="date"
-                                    value={formData.trial_ends_at ? formData.trial_ends_at.split('T')[0] : ''}
-                                    onChange={(e) => setFormData({...formData, trial_ends_at: e.target.value})}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white outline-none"
-                                />
-                             </div>
+
+                        {/* SELECTOR DE PLAN */}
+                        <div className="grid grid-cols-3 gap-2">
+                            {['FREE', 'PRO', 'TRIAL'].map((plan) => (
+                                <button
+                                    key={plan}
+                                    onClick={() => setFormData({...formData, plan_type: plan})}
+                                    className={`py-2 rounded-lg text-xs font-bold transition-all border ${
+                                        formData.plan_type === plan
+                                        ? 'bg-white text-black border-white'
+                                        : 'bg-slate-900 text-slate-500 border-slate-700 hover:border-slate-500'
+                                    }`}
+                                >
+                                    {plan}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* CONFIGURACIÓN DE FECHAS (Solo si no es FREE) */}
+                        {formData.plan_type !== 'FREE' && (
+                            <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-800 animate-in slide-in-from-top-2">
+                                <div className="flex justify-between items-end mb-3">
+                                    <label className="text-xs text-slate-400 font-bold uppercase flex items-center gap-1">
+                                        <Calendar size={12}/> Vencimiento
+                                    </label>
+                                    <span className="text-xs font-mono text-emerald-400">
+                                        {formData.plan_type === 'TRIAL' 
+                                            ? (formData.trial_ends_at ? format(new Date(formData.trial_ends_at), "dd/MM/yyyy") : 'Sin fecha')
+                                            : (formData.plan_expires_at ? format(new Date(formData.plan_expires_at), "dd/MM/yyyy") : '∞ Indefinido')
+                                        }
+                                    </span>
+                                </div>
+
+                                {/* BOTONES MÁGICOS */}
+                                <div className="space-y-2">
+                                    <p className="text-[10px] text-slate-500">Asignar vigencia rápida:</p>
+                                    <div className="grid grid-cols-4 gap-2">
+                                        {formData.plan_type === 'TRIAL' ? (
+                                            <>
+                                                <button onClick={() => applyDuration(7, 'days')} className="bg-slate-800 hover:bg-vidiooh hover:text-black text-white text-xs py-2 rounded transition-colors">+7 Días</button>
+                                                <button onClick={() => applyDuration(15, 'days')} className="bg-slate-800 hover:bg-vidiooh hover:text-black text-white text-xs py-2 rounded transition-colors">+15 Días</button>
+                                                <button onClick={() => applyDuration(30, 'days')} className="bg-slate-800 hover:bg-vidiooh hover:text-black text-white text-xs py-2 rounded transition-colors">+30 Días</button>
+                                                <button onClick={setIndefinite} className="bg-slate-800 hover:text-red-400 text-slate-400 text-xs py-2 rounded transition-colors"><RotateCcw size={14} className="mx-auto"/></button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <button onClick={() => applyDuration(1, 'months')} className="bg-slate-800 hover:bg-vidiooh hover:text-black text-white text-xs py-2 rounded transition-colors">+1 Mes</button>
+                                                <button onClick={() => applyDuration(6, 'months')} className="bg-slate-800 hover:bg-vidiooh hover:text-black text-white text-xs py-2 rounded transition-colors">+6 Meses</button>
+                                                <button onClick={() => applyDuration(1, 'years')} className="bg-slate-800 hover:bg-vidiooh hover:text-black text-white text-xs py-2 rounded transition-colors">+1 Año</button>
+                                                <button onClick={setIndefinite} className="bg-slate-800 hover:bg-emerald-500 hover:text-white text-emerald-500 text-xs py-2 rounded transition-colors border border-emerald-500/20">∞ Infinito</button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* INPUT MANUAL */}
+                                <div className="mt-3 pt-3 border-t border-slate-800">
+                                    <input 
+                                        type="date"
+                                        value={
+                                            formData.plan_type === 'TRIAL' 
+                                            ? (formData.trial_ends_at ? formData.trial_ends_at.split('T')[0] : '')
+                                            : (formData.plan_expires_at ? formData.plan_expires_at.split('T')[0] : '')
+                                        }
+                                        onChange={(e) => {
+                                            const val = e.target.value ? new Date(e.target.value).toISOString() : null
+                                            if(formData.plan_type === 'TRIAL') setFormData({...formData, trial_ends_at: val})
+                                            else setFormData({...formData, plan_expires_at: val})
+                                        }}
+                                        className="w-full bg-[#0f141c] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-vidiooh"
+                                    />
+                                </div>
+                            </div>
                         )}
                     </div>
                 )}
 
-                {/* Rol */}
-                <div className="mt-4 pt-4 border-t border-slate-800">
-                    <label className="text-xs text-slate-500 font-bold uppercase mb-1 block">Rol de Sistema</label>
-                    <select 
-                        value={formData.role}
-                        onChange={(e) => setFormData({...formData, role: e.target.value})}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white focus:border-vidiooh outline-none"
-                    >
-                        <option value="user">Usuario Normal</option>
-                        <option value="admin">Administrador</option>
-                    </select>
-                </div>
-
-                {/* Footer Modal */}
-                <div className="pt-4 flex gap-3">
-                    <button onClick={() => setEditingUser(null)} className="flex-1 py-3 bg-slate-800 text-slate-300 rounded-xl font-bold">Cancelar</button>
+                <div className="pt-2 flex gap-3">
+                    <button onClick={() => setEditingUser(null)} className="flex-1 py-3 bg-slate-800 text-slate-300 rounded-xl font-bold hover:bg-slate-700">Cancelar</button>
                     <button 
                         onClick={handleUpdateUser}
                         disabled={saving}
-                        className="flex-1 py-3 bg-vidiooh text-white rounded-xl font-bold hover:bg-vidiooh-dark transition-colors flex items-center justify-center gap-2"
+                        className="flex-1 py-3 bg-vidiooh text-black rounded-xl font-bold hover:bg-vidiooh-dark transition-colors flex items-center justify-center gap-2 shadow-lg shadow-vidiooh/20"
                     >
                         {saving ? <Loader2 className="animate-spin"/> : <Save size={18} />}
-                        Guardar
+                        Guardar Cambios
                     </button>
                 </div>
             </div>
         </div>
       )}
 
-      {/* HEADER & FILTROS (Igual que antes) */}
+      {/* HEADER & FILTROS */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white mb-1">Usuarios del Sistema</h1>
@@ -263,7 +331,7 @@ export default function UsersPage() {
         <button className="flex items-center gap-2 px-4 py-3 bg-[#0f141c] border border-slate-800 rounded-xl text-slate-300 hover:text-white transition-colors text-sm font-medium"><Filter size={18} /><span>Filtros</span></button>
       </div>
 
-      {/* TABLA */}
+      {/* TABLA SIN ERRORES */}
       <div className="bg-[#0f141c] border border-slate-800 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
@@ -273,7 +341,7 @@ export default function UsersPage() {
                 <th className="px-6 py-4">Tipo / Empresa</th>
                 <th className="px-6 py-4">Plan Actual</th>
                 <th className="px-6 py-4">Estado</th>
-                <th className="px-6 py-4">Registro</th>
+                <th className="px-6 py-4">Vencimiento</th>
                 <th className="px-6 py-4 text-right">Acciones</th>
               </tr>
             </thead>
@@ -287,7 +355,11 @@ export default function UsersPage() {
                 const planName = isCorp ? user.teams?.plan_type : (user.plan_type || 'FREE');
                 const companyName = isCorp ? user.teams?.name : 'Freelance';
                 
-                // Estilo para fila baneada (opacidad reducida)
+                // Calculamos fecha para mostrar en tabla
+                let expireDate = null
+                if (planName === 'TRIAL') expireDate = user.trial_ends_at
+                else if (!isCorp && planName !== 'FREE') expireDate = user.plan_expires_at
+
                 const rowClass = user.status === 'banned' ? 'hover:bg-red-500/5 bg-red-900/10' : 'hover:bg-slate-800/30';
 
                 return (
@@ -325,7 +397,6 @@ export default function UsersPage() {
                     {planName?.includes('CORP') && <span className="text-xs font-bold text-black bg-emerald-500 px-2 py-1 rounded border border-emerald-400">CORP</span>}
                   </td>
 
-                  {/* ESTADO REAL DESDE DB */}
                   <td className="px-6 py-4">
                       {user.status === 'banned' ? (
                         <span className="flex items-center gap-1.5 text-xs font-bold text-red-500 bg-red-500/10 px-2 py-1 rounded w-fit border border-red-500/20">
@@ -338,8 +409,18 @@ export default function UsersPage() {
                       )}
                   </td>
 
+                  {/* COLUMNA VENCIMIENTO */}
                   <td className="px-6 py-4">
-                     <span className="text-slate-400 text-xs capitalize">{formatDistanceToNow(new Date(user.created_at), { addSuffix: true, locale: es })}</span>
+                      {isCorp ? (
+                          <span className="text-slate-600 text-xs">--</span>
+                      ) : expireDate ? (
+                          <div className="flex items-center gap-1 text-xs text-white">
+                              <Clock size={12} className="text-vidiooh"/>
+                              {formatDistanceToNow(new Date(expireDate), { addSuffix: true, locale: es })}
+                          </div>
+                      ) : (
+                          <span className="text-slate-600 text-xs italic">Indefinido</span>
+                      )}
                   </td>
 
                   <td className="px-6 py-4 text-right">

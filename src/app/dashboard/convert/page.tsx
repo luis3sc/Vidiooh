@@ -9,7 +9,7 @@ import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
-// --- COMPONENTE MODAL REUTILIZABLE (Con Diseño Personalizado) ---
+// --- COMPONENTE MODAL REUTILIZABLE ---
 type ModalType = 'error' | 'limit' | 'banned' | null
 
 interface FeedbackModalProps {
@@ -34,7 +34,6 @@ const FeedbackModal = ({ type, isOpen, onClose, data }: FeedbackModalProps) => {
         limit: {
             icon: <Sparkles size={48} className="text-yellow-400 animate-pulse" />,
             title: "Límite del Plan Alcanzado",
-            // CAMBIO: Texto neutro para que sirva tanto para FREE como para PRO
             description: `Has consumido ${data?.used}/${data?.limit} conversiones de tu plan este mes. ¡No detengas tu flujo de trabajo!`,
             extra: (
                 <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800 my-4 text-left text-sm text-slate-300">
@@ -236,18 +235,16 @@ export default function ConvertPage() {
           return 
       }
 
-      // --- NUEVA LÓGICA DE LÍMITES POR PLAN ---
+      // --- CHECK LÍMITES ---
       // @ts-ignore
       const actualPlan = profile?.teams?.plan_type || profile?.plan_type || 'FREE'
 
-      // Definimos los límites según las nuevas reglas
       const PLAN_LIMITS: Record<string, number> = {
           FREE: 6,
           PRO: 45,
-          CORPORATE: 999999 // Ilimitado virtualmente
+          CORPORATE: 999999 
       }
 
-      // Si no es CORPORATE, verificamos el consumo (FREE y PRO tienen tope)
       if (actualPlan !== 'CORPORATE') {
           const now = new Date()
           const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1) 
@@ -271,14 +268,24 @@ export default function ConvertPage() {
 
       // PROCESAMIENTO FFMPEG
       await ffmpeg.writeFile('input.mp4', await fetchFile(file))
+      
+      // 1. Obtenemos formato seleccionado
       const format = formats.find(f => f.id === selectedFormatId) || formats[0]
+      
+      // --- 2. AJUSTE SILENCIOSO (SEGURIDAD FFMPEG) ---
+      // Si el usuario eligió un ancho/alto IMPAR (ej: 675), le restamos 1px internamente
+      // para evitar que el códec H.264 falle.
+      const safeW = format.w % 2 === 0 ? format.w : format.w - 1
+      const safeH = format.h % 2 === 0 ? format.h : format.h - 1
+
       const tempVideo = document.createElement('video')
       tempVideo.src = URL.createObjectURL(file)
       await new Promise((resolve) => { tempVideo.onloadedmetadata = () => resolve(true) })
       const ptsFactor = duration / (tempVideo.duration || 10)
 
+      // --- 3. Usamos safeW y safeH en el comando ---
       await ffmpeg.exec([
-        '-i', 'input.mp4', '-vf', `scale=${format.w}:${format.h},setsar=1:1,setpts=${ptsFactor}*PTS`,
+        '-i', 'input.mp4', '-vf', `scale=${safeW}:${safeH},setsar=1:1,setpts=${ptsFactor}*PTS`,
         '-an', '-c:v', 'libx264', '-preset', 'ultrafast', 'output.mp4'
       ])
 

@@ -68,7 +68,8 @@ export default function PricingPage() {
               <Feature text="6 videos al mes" />
               <Feature text="Calidad HD (720p)" />
               <Feature text="2 Formatos guardados" />
-              <Feature text="Videos limpios (Sin marca de agua)" highlight /> {/* AHORA ES ACTIVO */}
+              {/* CAMBIO: Ahora mostramos esto como positivo, no tachado */}
+              <Feature text="Videos limpios (Sin marca de agua)" highlight />
               <Feature text="Sin historial en la nube" active={false} />
             </div>
 
@@ -101,6 +102,7 @@ export default function PricingPage() {
             </p>
 
             <div className="space-y-4 flex-1 mb-8">
+              {/* CAMBIOS: Nuevos límites definidos */}
               <Feature text={<span className="text-white font-bold">45 videos al mes 🔥</span>} highlight />
               <Feature text="Calidad Full HD (1080p)" highlight />
               <Feature text="Videos limpios (Sin marca de agua)" />
@@ -143,7 +145,7 @@ export default function PricingPage() {
           </a>
         </div>
         
-        {/* Features Corporativas Traducidas a tu lenguaje */}
+        {/* Features Corporativas */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 pt-8 border-t border-slate-800/50">
             <CorpFeature icon={<PaintBucket size={16}/>} text="MARCA BLANCA (TU LOGO)" />
             <CorpFeature icon={<FileText size={16}/>} text="FACTURA / BOLETA" />
