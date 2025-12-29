@@ -5,7 +5,7 @@ import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
 import { 
   User, Mail, Shield, LogOut, HardDrive, 
-  Activity, Crown, Zap, Loader2, Building2, CalendarDays, Clock
+  Activity, Crown, Zap, Loader2, Building2, CalendarDays, Clock 
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -43,6 +43,7 @@ export default function AccountPage() {
   }, [])
 
   const fetchUserData = async () => {
+    // 1. Obtener Usuario Autenticado
     const { data: { user } } = await supabase.auth.getUser()
     
     if (!user) {
@@ -53,15 +54,20 @@ export default function AccountPage() {
     setUserEmail(user.email || '')
     setUserId(user.id)
 
-    // 1. Obtener Perfil (Traemos fechas de inicio y fin)
-    const { data: profile } = await supabase
+    // 2. Obtener Perfil
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', user.id)
       .single()
 
-    // 2. Obtener Datos de Equipo si aplica
+    if (profileError) {
+       console.error("Error al cargar perfil:", profileError.message)
+    }
+
+    // 3. Obtener Equipo / Plan y FECHAS
     if (profile && profile.team_id) {
+        // SI ES CORPORATIVO
         const { data: team } = await supabase
             .from('teams')
             .select('*')
@@ -72,21 +78,26 @@ export default function AccountPage() {
             setCompanyName(team.name)
             // @ts-ignore
             setUserPlan(team.plan_type?.toUpperCase() || 'FREE')
-            // Para corporativos, las fechas suelen estar en la tabla 'teams'
-            setPlanStartsAt(team.created_at) // O una columna plan_starts_at si la creaste en teams
+            setPlanStartsAt(team.created_at)
             setPlanExpiresAt(team.plan_expires_at)
         }
     } else {
+        // SI ES INDIVIDUAL
         setCompanyName('Freelance / Independiente')
         setUserPlan(profile?.plan_type || 'FREE')
-        // Para Pro/Trial individual, usamos las fechas del perfil
         setPlanStartsAt(profile?.plan_starts_at || profile?.created_at)
-        setPlanExpiresAt(profile?.plan_expires_at || profile?.trial_ends_at)
+        
+        if (profile?.plan_type === 'TRIAL') {
+            setPlanExpiresAt(profile?.trial_ends_at)
+        } else {
+            setPlanExpiresAt(profile?.plan_expires_at)
+        }
     }
     
-    // 3. Estadísticas
+    // 4. Calcular Estadísticas
     const now = new Date()
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+
     const { data: logs } = await supabase
       .from('conversion_logs')
       .select('file_size')
@@ -149,22 +160,35 @@ export default function AccountPage() {
   return (
     <div className="max-w-5xl mx-auto animate-in fade-in duration-500 pb-24 md:pb-0">
       
-      <div className="mb-8">
-        <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">Mi Cuenta</h1>
-        <p className="text-slate-400 text-sm">Administra tu perfil y revisa tu membresía.</p>
+      {/* HEADER CON BOTÓN DE SALIDA RÁPIDA (VISIBLE SIEMPRE) */}
+      <div className="mb-8 flex justify-between items-start">
+        <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">Mi Cuenta</h1>
+            <p className="text-slate-400 text-sm">Administra tu perfil y revisa tu membresía.</p>
+        </div>
+        
+        <button 
+            onClick={handleLogout} 
+            className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-red-500/10 text-slate-400 hover:text-red-500 rounded-xl transition-colors border border-transparent hover:border-red-500/20 text-sm font-bold shadow-lg"
+        >
+            <LogOut size={18}/> 
+            <span>Salir</span>
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
+        {/* COLUMNA IZQUIERDA: PERFIL */}
         <div className="lg:col-span-2 space-y-6">
           
-          {/* Información Personal */}
+          {/* Tarjeta de Datos Personales */}
           <div className="bg-[#0f141c] border border-slate-800 rounded-2xl p-6">
             <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-2">
               <User size={20} className="text-vidiooh" /> Información Personal
             </h3>
 
             <div className="space-y-4">
+              
               <div className="space-y-2">
                 <label className="text-xs font-bold text-vidiooh uppercase ml-1">Empresa / Organización</label>
                 <div className="relative">
@@ -197,39 +221,43 @@ export default function AccountPage() {
             </div>
           </div>
 
-          {/* NUEVA SECCIÓN: DETALLES DE MEMBRESÍA (VISIBLE PARA PAGOS) */}
+          {/* DETALLES DE MEMBRESÍA */}
           {userPlan !== 'FREE' && (
-            <div className="bg-[#0f141c] border border-slate-800 rounded-2xl p-6">
-                <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-2">
-                <CalendarDays size={20} className="text-vidiooh" /> Detalles de Membresía
+            <div className="bg-[#0f141c] border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-vidiooh/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+
+                <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-2 relative z-10">
+                    <CalendarDays size={20} className="text-vidiooh" /> Detalles de Membresía
                 </h3>
                 
-                <div className="grid md:grid-cols-2 gap-6">
-                    <div className="bg-[#151921] p-4 rounded-xl border border-slate-800">
+                <div className="grid md:grid-cols-2 gap-6 relative z-10">
+                    <div className="bg-[#151921] p-4 rounded-xl border border-slate-800 flex flex-col justify-center">
                         <div className="flex items-center gap-3 mb-2">
                             <div className="p-2 bg-emerald-500/10 rounded-lg">
                                 <Clock size={18} className="text-emerald-500" />
                             </div>
-                            <span className="text-xs font-bold text-slate-400 uppercase">Fecha de Inicio</span>
+                            <span className="text-xs font-bold text-slate-400 uppercase">Miembro Desde</span>
                         </div>
-                        <p className="text-white font-bold ml-11">{formatFullDate(planStartsAt)}</p>
+                        <p className="text-white font-bold ml-11 text-sm md:text-base">
+                            {formatFullDate(planStartsAt)}
+                        </p>
                     </div>
 
-                    <div className="bg-[#151921] p-4 rounded-xl border border-slate-800">
+                    <div className="bg-[#151921] p-4 rounded-xl border border-slate-800 flex flex-col justify-center">
                         <div className="flex items-center gap-3 mb-2">
                             <div className="p-2 bg-vidiooh/10 rounded-lg">
                                 <Zap size={18} className="text-vidiooh" />
                             </div>
-                            <span className="text-xs font-bold text-slate-400 uppercase">Próximo Vencimiento</span>
+                            <span className="text-xs font-bold text-slate-400 uppercase">Vencimiento / Renovación</span>
                         </div>
-                        <p className="text-white font-bold ml-11">
-                            {planExpiresAt ? formatFullDate(planExpiresAt) : 'Membresía Vitalicia'}
+                        <p className="text-white font-bold ml-11 text-sm md:text-base">
+                            {planExpiresAt ? formatFullDate(planExpiresAt) : 'Acceso Vitalicio / Indefinido'}
                         </p>
                     </div>
                 </div>
                 
-                <p className="mt-4 text-[10px] text-slate-500 italic">
-                    * Tu membresía se renueva automáticamente según el periodo contratado (Mensual/Anual).
+                <p className="mt-4 text-[10px] text-slate-500 italic relative z-10">
+                    * Si tienes dudas sobre tu facturación, contacta a soporte.
                 </p>
             </div>
           )}
@@ -260,8 +288,10 @@ export default function AccountPage() {
           </div>
         </div>
 
-        {/* COLUMNA DERECHA */}
+        {/* COLUMNA DERECHA: PLAN Y ESTADÍSTICAS */}
         <div className="space-y-6">
+          
+          {/* Tarjeta de Plan DINÁMICA */}
           <div className="bg-gradient-to-br from-vidiooh/20 to-[#0f141c] border border-vidiooh/30 rounded-2xl p-6 relative overflow-hidden group">
             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
               <Crown size={100} className="text-vidiooh" />
@@ -305,10 +335,10 @@ export default function AccountPage() {
             </div>
           </div>
 
-          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all group">
-            <LogOut size={20} className="group-hover:-translate-x-1 transition-transform" />
-            <span className="font-bold">Cerrar Sesión</span>
-          </button>
+          {/* ✅ HE ELIMINADO EL BOTÓN DE CERRAR SESIÓN QUE ESTABA AQUÍ
+             PORQUE YA LO TIENES EN EL HEADER VISIBLE PARA MÓVIL
+          */}
+
         </div>
       </div>
     </div>

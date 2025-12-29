@@ -94,14 +94,6 @@ export default function TopNav() {
 
       {/* 3. Botón Salir */}
       <div className="flex items-center gap-4">
-        <button 
-          onClick={handleLogout}
-          className="flex items-center gap-2 text-slate-500 hover:text-red-400 transition-colors text-xs font-medium" 
-          title="Cerrar Sesión"
-        >
-          <span className="hidden lg:block">Salir</span>
-          <LogOut size={18} />
-        </button>
       </div>
     </header>
   )
