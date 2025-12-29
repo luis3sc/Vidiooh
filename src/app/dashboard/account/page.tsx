@@ -5,7 +5,7 @@ import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
 import { 
   User, Mail, Shield, LogOut, HardDrive, 
-  Activity, Crown, Zap, Loader2, Building2, CalendarDays 
+  Activity, Crown, Zap, Loader2, Building2, CalendarDays, Clock
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -24,7 +24,9 @@ export default function AccountPage() {
   const [userId, setUserId] = useState('')
   const [companyName, setCompanyName] = useState('Freelance / Independiente') 
   const [userPlan, setUserPlan] = useState('FREE') 
-  // NUEVO: Estado para la fecha de expiración
+  
+  // FECHAS DE MEMBRESÍA
+  const [planStartsAt, setPlanStartsAt] = useState<string | null>(null)
   const [planExpiresAt, setPlanExpiresAt] = useState<string | null>(null)
 
   // Estadísticas
@@ -41,7 +43,6 @@ export default function AccountPage() {
   }, [])
 
   const fetchUserData = async () => {
-    // 1. Obtener Usuario Autenticado
     const { data: { user } } = await supabase.auth.getUser()
     
     if (!user) {
@@ -52,27 +53,18 @@ export default function AccountPage() {
     setUserEmail(user.email || '')
     setUserId(user.id)
 
-    // 2. Obtener Perfil (Traemos todo, incluyendo plan_expires_at)
-    const { data: profile, error: profileError } = await supabase
+    // 1. Obtener Perfil (Traemos fechas de inicio y fin)
+    const { data: profile } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', user.id)
       .single()
 
-    if (profileError) {
-       console.error("Error al cargar perfil:", profileError.message)
-    }
-
-    // Guardamos la fecha de expiración si existe en el perfil individual
-    if (profile) {
-        setPlanExpiresAt(profile.plan_expires_at)
-    }
-
-    // 3. Obtener Equipo / Plan
+    // 2. Obtener Datos de Equipo si aplica
     if (profile && profile.team_id) {
         const { data: team } = await supabase
             .from('teams')
-            .select('name, plan_type')
+            .select('*')
             .eq('id', profile.team_id)
             .single()
         
@@ -80,19 +72,21 @@ export default function AccountPage() {
             setCompanyName(team.name)
             // @ts-ignore
             setUserPlan(team.plan_type?.toUpperCase() || 'FREE')
-            // Si es equipo, la expiración individual a veces no importa, 
-            // pero la dejamos por si acaso el usuario quiere verla.
+            // Para corporativos, las fechas suelen estar en la tabla 'teams'
+            setPlanStartsAt(team.created_at) // O una columna plan_starts_at si la creaste en teams
+            setPlanExpiresAt(team.plan_expires_at)
         }
     } else {
         setCompanyName('Freelance / Independiente')
-        // Si no tiene equipo, usamos su plan individual
         setUserPlan(profile?.plan_type || 'FREE')
+        // Para Pro/Trial individual, usamos las fechas del perfil
+        setPlanStartsAt(profile?.plan_starts_at || profile?.created_at)
+        setPlanExpiresAt(profile?.plan_expires_at || profile?.trial_ends_at)
     }
     
-    // 4. Calcular Estadísticas
+    // 3. Estadísticas
     const now = new Date()
     const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-
     const { data: logs } = await supabase
       .from('conversion_logs')
       .select('file_size')
@@ -106,6 +100,11 @@ export default function AccountPage() {
     }
 
     setLoading(false)
+  }
+
+  const formatFullDate = (dateStr: string | null) => {
+    if (!dateStr) return 'No definida'
+    return format(new Date(dateStr), "dd 'de' MMMM, yyyy", { locale: es })
   }
 
   const formatBytes = (bytes: number) => {
@@ -152,22 +151,20 @@ export default function AccountPage() {
       
       <div className="mb-8">
         <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">Mi Cuenta</h1>
-        <p className="text-slate-400 text-sm">Administra tu perfil y revisa tu consumo.</p>
+        <p className="text-slate-400 text-sm">Administra tu perfil y revisa tu membresía.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* COLUMNA IZQUIERDA: PERFIL */}
         <div className="lg:col-span-2 space-y-6">
           
-          {/* Tarjeta de Datos Personales */}
+          {/* Información Personal */}
           <div className="bg-[#0f141c] border border-slate-800 rounded-2xl p-6">
             <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-2">
               <User size={20} className="text-vidiooh" /> Información Personal
             </h3>
 
             <div className="space-y-4">
-              
               <div className="space-y-2">
                 <label className="text-xs font-bold text-vidiooh uppercase ml-1">Empresa / Organización</label>
                 <div className="relative">
@@ -186,61 +183,76 @@ export default function AccountPage() {
                   <label className="text-xs font-bold text-slate-500 uppercase ml-1">Correo Electrónico</label>
                   <div className="relative">
                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                    <input 
-                      type="text" 
-                      value={userEmail} 
-                      disabled 
-                      className="w-full bg-[#151921] border border-slate-800 rounded-xl pl-12 pr-4 py-3 text-slate-400 cursor-not-allowed select-none"
-                    />
+                    <input type="text" value={userEmail} disabled className="w-full bg-[#151921] border border-slate-800 rounded-xl pl-12 pr-4 py-3 text-slate-400 cursor-not-allowed select-none" />
                   </div>
                 </div>
-
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-500 uppercase ml-1">ID de Usuario</label>
                   <div className="relative">
                     <Shield className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                    <input 
-                      type="text" 
-                      value={userId.substring(0, 18) + '...'} 
-                      disabled 
-                      className="w-full bg-[#151921] border border-slate-800 rounded-xl pl-12 pr-4 py-3 text-slate-500 text-xs font-mono cursor-not-allowed"
-                    />
+                    <input type="text" value={userId.substring(0, 18) + '...'} disabled className="w-full bg-[#151921] border border-slate-800 rounded-xl pl-12 pr-4 py-3 text-slate-500 text-xs font-mono cursor-not-allowed" />
                   </div>
                 </div>
               </div>
-
             </div>
           </div>
 
-          {/* Tarjeta de Seguridad */}
+          {/* NUEVA SECCIÓN: DETALLES DE MEMBRESÍA (VISIBLE PARA PAGOS) */}
+          {userPlan !== 'FREE' && (
+            <div className="bg-[#0f141c] border border-slate-800 rounded-2xl p-6">
+                <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-2">
+                <CalendarDays size={20} className="text-vidiooh" /> Detalles de Membresía
+                </h3>
+                
+                <div className="grid md:grid-cols-2 gap-6">
+                    <div className="bg-[#151921] p-4 rounded-xl border border-slate-800">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="p-2 bg-emerald-500/10 rounded-lg">
+                                <Clock size={18} className="text-emerald-500" />
+                            </div>
+                            <span className="text-xs font-bold text-slate-400 uppercase">Fecha de Inicio</span>
+                        </div>
+                        <p className="text-white font-bold ml-11">{formatFullDate(planStartsAt)}</p>
+                    </div>
+
+                    <div className="bg-[#151921] p-4 rounded-xl border border-slate-800">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="p-2 bg-vidiooh/10 rounded-lg">
+                                <Zap size={18} className="text-vidiooh" />
+                            </div>
+                            <span className="text-xs font-bold text-slate-400 uppercase">Próximo Vencimiento</span>
+                        </div>
+                        <p className="text-white font-bold ml-11">
+                            {planExpiresAt ? formatFullDate(planExpiresAt) : 'Membresía Vitalicia'}
+                        </p>
+                    </div>
+                </div>
+                
+                <p className="mt-4 text-[10px] text-slate-500 italic">
+                    * Tu membresía se renueva automáticamente según el periodo contratado (Mensual/Anual).
+                </p>
+            </div>
+          )}
+
+          {/* Seguridad */}
           <div className="bg-[#0f141c] border border-slate-800 rounded-2xl p-6">
             <h3 className="text-white font-bold text-lg mb-4 flex items-center gap-2">
               <Shield size={20} className="text-vidiooh" /> Seguridad
             </h3>
-            
             {!isChangingPass ? (
               <div className="flex items-center justify-between bg-[#151921] p-4 rounded-xl border border-slate-800">
                 <div>
                   <p className="text-white font-medium">Contraseña</p>
                   <p className="text-slate-500 text-xs">••••••••••••••••</p>
                 </div>
-                <button onClick={() => setIsChangingPass(true)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm rounded-lg transition-colors">
-                  Cambiar
-                </button>
+                <button onClick={() => setIsChangingPass(true)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm rounded-lg transition-colors">Cambiar</button>
               </div>
             ) : (
               <div className="bg-[#151921] p-4 rounded-xl border border-slate-800">
                   <label className="text-xs font-bold text-vidiooh uppercase mb-2 block">Nueva Contraseña</label>
-                  <input 
-                    type="password" 
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full bg-[#0f141c] border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-vidiooh outline-none mb-4"
-                  />
+                  <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full bg-[#0f141c] border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-vidiooh outline-none mb-4" />
                   <div className="flex gap-3">
-                    <button onClick={handleChangePassword} disabled={passLoading} className="flex-1 bg-vidiooh hover:bg-vidiooh-dark text-black font-bold py-2 rounded-lg">
-                      {passLoading ? 'Actualizando...' : 'Guardar Nueva'}
-                    </button>
+                    <button onClick={handleChangePassword} disabled={passLoading} className="flex-1 bg-vidiooh hover:bg-vidiooh-dark text-black font-bold py-2 rounded-lg">{passLoading ? 'Actualizando...' : 'Guardar Nueva'}</button>
                     <button onClick={() => setIsChangingPass(false)} className="px-4 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg">Cancelar</button>
                   </div>
               </div>
@@ -248,71 +260,29 @@ export default function AccountPage() {
           </div>
         </div>
 
-        {/* COLUMNA DERECHA: PLAN Y ESTADÍSTICAS */}
+        {/* COLUMNA DERECHA */}
         <div className="space-y-6">
-          
-          {/* Tarjeta de Plan DINÁMICA */}
           <div className="bg-gradient-to-br from-vidiooh/20 to-[#0f141c] border border-vidiooh/30 rounded-2xl p-6 relative overflow-hidden group">
             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
               <Crown size={100} className="text-vidiooh" />
             </div>
-            
             <div className="flex items-center gap-2 mb-2">
               <span className={`text-[10px] font-black px-2 py-1 rounded-full uppercase tracking-widest ${userPlan === 'PRO' || userPlan === 'CORPORATE' ? 'bg-vidiooh text-black' : 'bg-slate-600 text-white'}`}>
                 Plan Actual
               </span>
             </div>
-            
-            <h2 className="text-3xl font-bold text-white mb-1">
-                {userPlan === 'CORPORATE' ? 'EMPRESAS' : userPlan}
-            </h2>
-            
+            <h2 className="text-3xl font-bold text-white mb-1">{userPlan === 'CORPORATE' ? 'EMPRESAS' : userPlan}</h2>
             <p className="text-vidiooh text-sm mb-6 font-medium">
               {userPlan === 'FREE' ? 'Cuenta Gratuita' : userPlan === 'CORPORATE' ? 'Plan Corporativo Activo' : 'Suscripción Profesional'}
             </p>
             
-            {/* LÓGICA DE VENCIMIENTO */}
-            {userPlan === 'FREE' ? (
-                <div className="mb-6 p-3 bg-white/5 rounded-lg border border-white/5">
-                    <p className="text-xs text-slate-400">Estado:</p>
-                    <p className="text-white font-bold text-sm flex items-center gap-2">
-                        <Activity size={14} className="text-emerald-500"/> Siempre Activo
-                    </p>
-                </div>
-            ) : userPlan === 'CORPORATE' ? (
-                <div className="mb-6 p-3 bg-vidiooh/10 rounded-lg border border-vidiooh/20">
-                    <p className="text-xs text-vidiooh/70">Renovación:</p>
-                    <p className="text-white font-bold text-sm flex items-center gap-2">
-                        <Building2 size={14} className="text-vidiooh"/> Gestionada por Empresa
-                    </p>
-                </div>
-            ) : planExpiresAt ? (
-                <div className="mb-6 p-3 bg-vidiooh/10 rounded-lg border border-vidiooh/20">
-                    <p className="text-xs text-vidiooh/70">Próxima renovación:</p>
-                    <p className="text-white font-bold text-sm flex items-center gap-2">
-                        <CalendarDays size={14} className="text-vidiooh"/> 
-                        {format(new Date(planExpiresAt), "d 'de' MMMM, yyyy", { locale: es })}
-                    </p>
-                </div>
-            ) : (
-                <div className="mb-6 h-12"></div> // Espaciador
-            )}
-
-            <button 
-                onClick={() => router.push('/dashboard/pricing')}
-                className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-slate-300 hover:text-white rounded-xl text-sm font-medium transition-colors"
-            >
+            <button onClick={() => router.push('/dashboard/pricing')} className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-slate-300 hover:text-white rounded-xl text-sm font-medium transition-colors">
               {userPlan === 'FREE' ? 'Mejorar Plan' : 'Ver Planes'}
             </button>
           </div>
 
-          {/* Estadísticas de Uso */}
           <div className="bg-[#0f141c] border border-slate-800 rounded-2xl p-6">
-            
-            <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-2">
-              <Activity size={20} className="text-vidiooh" /> Uso este Mes
-            </h3>
-            
+            <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-2"><Activity size={20} className="text-vidiooh" /> Uso este Mes</h3>
             <div className="space-y-6">
               <div>
                 <div className="flex justify-between text-sm mb-2">
@@ -320,12 +290,7 @@ export default function AccountPage() {
                   <span className="text-white font-mono">{monthlyVideos} / {userPlan === 'FREE' ? '6' : userPlan === 'PRO' ? '45' : '∞'}</span>
                 </div>
                 <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-vidiooh rounded-full transition-all duration-500" 
-                    style={{ 
-                        width: `${Math.min((monthlyVideos / (userPlan === 'FREE' ? 6 : userPlan === 'PRO' ? 45 : 100)) * 100, 100)}%` 
-                    }} 
-                  />
+                  <div className="h-full bg-vidiooh rounded-full transition-all duration-500" style={{ width: `${Math.min((monthlyVideos / (userPlan === 'FREE' ? 6 : userPlan === 'PRO' ? 45 : 100)) * 100, 100)}%` }} />
                 </div>
               </div>
               <div>
@@ -344,7 +309,6 @@ export default function AccountPage() {
             <LogOut size={20} className="group-hover:-translate-x-1 transition-transform" />
             <span className="font-bold">Cerrar Sesión</span>
           </button>
-
         </div>
       </div>
     </div>
