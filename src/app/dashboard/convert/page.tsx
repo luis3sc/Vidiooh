@@ -2,21 +2,32 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { useDropzone, FileRejection } from 'react-dropzone'
-import { Upload, Video, Zap, X, FileVideo, Download, Loader2, CheckCircle2, AlertTriangle, ArrowRight, Lock, Ban, Sparkles, FileWarning, Cloud, CloudOff } from 'lucide-react'
+// Importamos iconos adicionales para la alerta (Thermometer, Cpu)
+import { Upload, Video, Zap, X, FileVideo, Download, Loader2, CheckCircle2, AlertTriangle, ArrowRight, Lock, Ban, Sparkles, FileWarning, Cloud, CloudOff, Radio, Cpu, Thermometer } from 'lucide-react'
 import { useFFmpeg } from '../../../hooks/useFFmpeg'
 import { fetchFile } from '@ffmpeg/util'
 import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import FeedbackButton from '../../../components/FeedbackButton'
+import { useKeepAlive } from '../../../hooks/useKeepAlive'
+// 1. IMPORTAR EL NUEVO HOOK DE HARDWARE
+import { useHardwareCheck } from '../../../hooks/useHardwareCheck'
 
-// ... (El componente FeedbackModal se mantiene IGUAL) ...
+// --- CONSTANTES DE LÍMITES (EN BYTES) ---
+const PLAN_SIZE_LIMITS: Record<string, number> = {
+    FREE: 15 * 1024 * 1024,      
+    PRO: 30 * 1024 * 1024,       
+    CORPORATE: 60 * 1024 * 1024  
+}
+
 type ModalType = 'error' | 'limit' | 'banned' | null
 
 interface FeedbackModalProps {
     type: ModalType
     isOpen: boolean
     onClose: () => void
-    data?: { used?: number, limit?: number }
+    data?: { used?: number, limit?: number, maxFileSize?: string }
 }
 
 const FeedbackModal = ({ type, isOpen, onClose, data }: FeedbackModalProps) => {
@@ -26,7 +37,7 @@ const FeedbackModal = ({ type, isOpen, onClose, data }: FeedbackModalProps) => {
         error: {
             icon: <FileWarning size={48} className="text-red-500" />,
             title: "Archivo demasiado pesado",
-            description: "El video excede el límite de seguridad de 50MB. Procesar archivos tan grandes puede colgar tu navegador.",
+            description: `Tu plan actual solo permite videos de hasta ${data?.maxFileSize || '15MB'}. Para procesar archivos más grandes, mejora tu membresía.`,
             buttonText: "Entendido, subiré otro",
             buttonColor: "bg-slate-800 hover:bg-slate-700 text-white",
             action: onClose
@@ -85,9 +96,9 @@ const FeedbackModal = ({ type, isOpen, onClose, data }: FeedbackModalProps) => {
                     {current.buttonText}
                 </button>
 
-                {type === 'limit' && (
+                {(type === 'limit' || type === 'error') && (
                     <button onClick={onClose} className="mt-4 text-xs text-slate-500 hover:text-white underline">
-                        Quizás más tarde
+                        {(type === 'error' && data?.maxFileSize !== '60MB') ? 'Ver Planes Pro' : 'Quizás más tarde'}
                     </button>
                 )}
             </div>
@@ -127,9 +138,10 @@ export default function ConvertPage() {
   const [duration, setDuration] = useState(7)
   const [campaignName, setCampaignName] = useState('')
   const [file, setFile] = useState<File | null>(null)
-  
-  // Estado para guardar en nube (False por defecto)
   const [shouldSaveToCloud, setShouldSaveToCloud] = useState(false)
+  
+  const [userPlan, setUserPlan] = useState<string>('FREE')
+  const [currentSizeLimit, setCurrentSizeLimit] = useState<number>(PLAN_SIZE_LIMITS.FREE)
 
   const [videoMeta, setVideoMeta] = useState<{ w: number, h: number, orientation: string } | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -138,16 +150,23 @@ export default function ConvertPage() {
   const [currentStep, setCurrentStep] = useState(0)
   
   const [modalType, setModalType] = useState<ModalType>(null)
-  const [modalData, setModalData] = useState<{ used?: number, limit?: number }>({})
+  const [modalData, setModalData] = useState<{ used?: number, limit?: number, maxFileSize?: string }>({})
 
   const downloadLinkRef = useRef<HTMLAnchorElement>(null)
 
+  const isBackgroundSafe = useKeepAlive(isProcessing)
+  
+  // 2. USAR EL HOOK DE HARDWARE
+  const { isLowSpec } = useHardwareCheck()
+
   useEffect(() => { load() }, [])
 
+  // Carga inicial
   useEffect(() => {
-    const loadFormats = async () => {
+    const initData = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
+
       const { data } = await supabase.from('custom_formats').select('*').eq('user_id', user.id).order('created_at', { ascending: true })
       if (data && data.length > 0) {
         const customMapped = data.map(f => ({
@@ -157,8 +176,21 @@ export default function ConvertPage() {
         setSelectedFormatId(customMapped[0].id)
       }
       setFormatsLoading(false)
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('plan_type, teams(plan_type)')
+        .eq('id', user.id)
+        .single()
+      
+      // @ts-ignore
+      const actualPlan = profile?.teams?.plan_type || profile?.plan_type || 'FREE'
+      setUserPlan(actualPlan)
+      
+      const limit = PLAN_SIZE_LIMITS[actualPlan] || PLAN_SIZE_LIMITS.FREE
+      setCurrentSizeLimit(limit)
     }
-    loadFormats()
+    initData()
   }, [])
 
   useEffect(() => {
@@ -176,6 +208,7 @@ export default function ConvertPage() {
     if (fileRejections.length > 0) {
         const rejection = fileRejections[0]
         if (rejection.errors.some(e => e.code === 'file-too-large')) {
+            setModalData({ maxFileSize: `${(currentSizeLimit / 1024 / 1024).toFixed(0)}MB` })
             setModalType('error') 
             return 
         }
@@ -195,13 +228,13 @@ export default function ConvertPage() {
         setVideoMeta({ w, h, orientation: getOrientation(w, h) })
       }
     }
-  }, [])
+  }, [currentSizeLimit])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: { 'video/*': ['.mp4', '.mov', '.avi'] },
     maxFiles: 1,
-    maxSize: 50 * 1024 * 1024
+    maxSize: currentSizeLimit 
   })
 
   const selectedFormat = formats.find(f => f.id === selectedFormatId)
@@ -238,7 +271,6 @@ export default function ConvertPage() {
           return 
       }
 
-      // --- CHECK LÍMITES ---
       // @ts-ignore
       const actualPlan = profile?.teams?.plan_type || profile?.plan_type || 'FREE'
 
@@ -269,11 +301,9 @@ export default function ConvertPage() {
           }
       }
 
-      // PROCESAMIENTO FFMPEG
       await ffmpeg.writeFile('input.mp4', await fetchFile(file))
       
       const format = formats.find(f => f.id === selectedFormatId) || formats[0]
-      
       const safeW = format.w % 2 === 0 ? format.w : format.w - 1
       const safeH = format.h % 2 === 0 ? format.h : format.h - 1
 
@@ -293,15 +323,12 @@ export default function ConvertPage() {
       const finalName = `${campaignName ? campaignName.trim().replace(/\s+/g, '_') : file.name.replace(/\.[^/.]+$/, "")}_${duration}s_${format.label.replace(/\s/g, '')}_${getFormattedDate()}.mp4`
       setFinalOutputName(finalName)
 
-      // --- LOGICA DE SUBIDA ---
       let storagePath = null
-
       if (shouldSaveToCloud) {
           storagePath = `${user.id}/${Date.now()}_${finalName}`
           const { error: uploadError } = await supabase.storage
               .from('raw-videos')
               .upload(storagePath, outputBlob, { contentType: 'video/mp4', upsert: false })
-          
           if (uploadError) throw uploadError
       }
 
@@ -332,7 +359,6 @@ export default function ConvertPage() {
 
   const handleClose = () => { setVideoUrl(null); setFile(null); setFinalOutputName(''); setVideoMeta(null); }
 
-  // Componente del Botón para reusar
   const ConvertButton = ({ mobile = false }) => (
     <button 
         onClick={handleProcess} 
@@ -350,10 +376,28 @@ export default function ConvertPage() {
     </button>
   )
 
-  // CALCULO DEL PORCENTAJE PARA EL SLIDER
+  // COMPONENTE DE ALERTA PARA PC LENTA
+  const LowSpecAlert = () => {
+    if (!isLowSpec) return null;
+    return (
+        <div className="mb-4 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 flex gap-3 animate-in fade-in slide-in-from-bottom-2">
+            <Thermometer size={20} className="text-amber-500 shrink-0 mt-0.5" />
+            <div>
+                <h4 className="text-amber-200 text-xs font-bold uppercase tracking-wide mb-1">Recomendación de Rendimiento</h4>
+                <p className="text-amber-100/70 text-[11px] leading-tight">
+                    Detectamos recursos limitados en tu equipo. Para evitar errores o lentitud:
+                </p>
+                <ul className="list-disc list-inside text-[10px] text-amber-100/60 mt-1 space-y-0.5">
+                    <li>Cierra otras pestañas o programas pesados.</li>
+                    <li>No minimices esta ventana mientras procesa.</li>
+                </ul>
+            </div>
+        </div>
+    )
+  }
+
   const minDuration = 7
   const maxDuration = 14
-  // Calcula qué porcentaje del slider está "lleno"
   const progressPercent = ((duration - minDuration) / (maxDuration - minDuration)) * 100
 
   return (
@@ -364,7 +408,14 @@ export default function ConvertPage() {
       {/* --- MODAL DE CARGA (OVERLAY) --- */}
       {(isProcessing || videoUrl) && (
         <div className="fixed inset-0 z-[100] bg-[#020617]/95 backdrop-blur-xl flex flex-col items-center justify-center animate-in fade-in duration-300 p-4">
-          {/* ... (Contenido del modal de carga igual que antes) ... */}
+          
+          {isProcessing && !videoUrl && (
+             <div className="absolute top-4 right-4 z-[110] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-2 animate-pulse backdrop-blur-md">
+                <Radio size={12} className={isBackgroundSafe ? "animate-ping" : ""} />
+                {isBackgroundSafe ? "Modo 2do Plano Activo" : "Procesando"}
+             </div>
+          )}
+
           {isProcessing && !videoUrl && (
             <div className="flex flex-col items-center max-w-sm w-full animate-in slide-in-from-bottom-10 fade-in duration-500">
                <div className="relative w-28 h-28 md:w-32 md:h-32 mb-8">
@@ -378,6 +429,14 @@ export default function ConvertPage() {
               <p className="text-vidiooh text-xs md:text-sm font-mono animate-pulse min-h-[20px] text-center px-4">
                 {PROCESSING_STEPS[currentStep]}
               </p>
+              
+              {/* ALERTA EN PANTALLA DE CARGA TAMBIÉN SI ES LENTA */}
+              {isLowSpec && (
+                  <p className="mt-4 text-[10px] text-amber-400 bg-amber-900/30 px-3 py-1 rounded-full border border-amber-900/50 flex items-center gap-2">
+                      <Cpu size={10} /> Optimizando para tu equipo... no cierres la pestaña.
+                  </p>
+              )}
+
               <div className="w-3/4 md:w-full h-1 bg-slate-800 rounded-full mt-8 overflow-hidden">
                 <div className="h-full bg-vidiooh transition-all duration-1000 ease-linear" style={{ width: `${((currentStep + 1) / PROCESSING_STEPS.length) * 100}%` }} />
               </div>
@@ -436,7 +495,6 @@ export default function ConvertPage() {
               <input {...getInputProps()} />
               {file ? (
                 <div className="text-center animate-in zoom-in duration-300">
-                  {/* ... Preview File Info ... */}
                   <div className="w-14 h-14 lg:w-20 lg:h-20 bg-vidiooh/20 rounded-full flex items-center justify-center mx-auto mb-3 shadow-[0_0_30px_rgba(34,197,94,0.2)]">
                     <FileVideo className="text-vidiooh" size={32} />
                   </div>
@@ -457,12 +515,11 @@ export default function ConvertPage() {
                   </div>
                   <h3 className="text-lg lg:text-2xl font-bold text-white mb-1">Cargar Video</h3>
                   <p className="text-vidiooh text-sm font-medium mb-2 lg:mb-4 group-hover:underline decoration-2 underline-offset-4">Toca para explorar</p>
-                  <p className="text-slate-500 text-xs">Máx. 50MB (.mp4)</p>
+                  <p className="text-slate-500 text-xs">Máx. {(currentSizeLimit / 1024 / 1024).toFixed(0)}MB (.mp4)</p>
                 </div>
               )}
             </div>
 
-            {/* ERROR VISUAL */}
             {isOrientationMismatch && (
                 <div className="mt-4 bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-start gap-3 animate-in slide-in-from-top-2">
                     <Ban className="text-red-500 shrink-0 mt-0.5" size={20}/>
@@ -473,8 +530,9 @@ export default function ConvertPage() {
                 </div>
             )}
 
-            {/* BOTÓN DESKTOP (SOLO VISIBLE EN LG+) */}
-            <div className="hidden lg:block">
+            <div className="hidden md:block mt-6">
+                {/* 3. AÑADIMOS LA ALERTA ANTES DEL BOTÓN DE ESCRITORIO */}
+                <LowSpecAlert />
                 <ConvertButton />
             </div>
         </div>
@@ -538,7 +596,6 @@ export default function ConvertPage() {
               <span className="text-xl font-bold text-vidiooh drop-shadow-[0_0_5px_rgba(34,197,94,0.5)]">{duration}s</span>
             </div>
             <div className="relative mb-1">
-              {/* SLIDER CORREGIDO: Usa el color naranja exacto (#F04E30) para el progreso y accent-vidiooh para el punto */}
               <input 
                 type="range" 
                 min={minDuration} 
@@ -548,7 +605,6 @@ export default function ConvertPage() {
                 onChange={(e) => setDuration(parseInt(e.target.value))} 
                 className="w-full h-2 rounded-lg appearance-none cursor-pointer outline-none accent-vidiooh bg-slate-700"
                 style={{
-                    // Usamos el HEX exacto del naranja para la parte llena del slider
                     background: `linear-gradient(to right, #F04E30 ${progressPercent}%, #334155 ${progressPercent}%)`
                 }}
               />
@@ -577,18 +633,23 @@ export default function ConvertPage() {
         </div>
       </div>
 
-      {/* --- BARRA FLOTANTE MÓVIL (GRADIENT GLASS PREMIUM) --- */}
-      <div className="fixed bottom-[4rem] left-0 w-full z-40 lg:hidden pointer-events-none">
-          <div className="absolute bottom-0 w-full h-40 backdrop-blur-xl bg-gradient-to-t from-[#0f141c] via-[#0f141c]/80 to-transparent [mask-image:linear-gradient(to_top,black_40%,transparent_100%)]"></div>
-          <div className="relative w-full p-4 pt-8 pointer-events-auto">
-              <div className="max-w-md mx-auto">
-                 <div className="shadow-[0_10px_30px_-10px_rgba(0,0,0,0.8)] rounded-full">
+      <div className="fixed bottom-[4rem] left-0 w-full z-40 md:hidden pointer-events-none">
+          <div className="absolute bottom-0 w-full h-48 backdrop-blur-xl bg-gradient-to-t from-[#0f141c] via-[#0f141c] to-transparent [mask-image:linear-gradient(to_top,black_80%,transparent_100%)]"></div>
+          <div className="relative w-full px-4 pb-6 pt-12 pointer-events-auto flex flex-col items-center">
+              <div className="w-full max-w-md">
+                 <div className="shadow-[0_10px_30px_-10px_rgba(0,0,0,0.8)] rounded-full mb-2"> 
+                    {/* 4. AÑADIMOS LA ALERTA ANTES DEL BOTÓN DE MÓVIL TAMBIÉN */}
+                    <LowSpecAlert />
                     <ConvertButton mobile={true} />
+                 </div>
+
+                 <div className="flex justify-center">
+                    <FeedbackButton mode="text" />
                  </div>
               </div>
           </div>
+          
       </div>
-
     </div>
   )
 }

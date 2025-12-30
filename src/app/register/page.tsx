@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import Link from 'next/link'
-import { createClient } from '../../lib/supabase/client' 
+import { createBrowserClient } from '@supabase/ssr' // Usamos createBrowserClient directamente
 import { Lock, Mail, Loader2, AlertCircle, ArrowLeft, ArrowRight, CheckCircle2 } from 'lucide-react'
 
 // --- COMPONENTE ICONO VIDIOOH (ACTUALIZADO - VERSIÓN MÁS GRANDE) ---
@@ -22,7 +22,12 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
-  const supabase = createClient()
+  
+  // Instancia del cliente de Supabase
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
 
   const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -33,11 +38,13 @@ export default function RegisterPage() {
     const email = formData.get('email') as string
     const password = formData.get('password') as string
 
+    // REGISTRO CON REDIRECCIÓN AL CALLBACK
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        // Esto es clave: redirige a tu ruta /auth/callback después de validar el correo
+        emailRedirectTo: `${location.origin}/auth/callback`,
       },
     })
 

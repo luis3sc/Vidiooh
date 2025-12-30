@@ -10,17 +10,11 @@ import {
 } from 'lucide-react'
 
 // --- CONSTANTE DE COLOR PARA ESTILOS EN LÍNEA (Slider) ---
-// Si cambias el color en tailwind.config.js, cámbialo aquí también para que el slider coincida.
 const BRAND_HEX = '#F04E30'; 
 
-
-// --- COMPONENTE LOGO SVG (Adaptable al color de la clase padre o específico) ---
+// --- COMPONENTE LOGO SVG ---
 const VidioohLogo = ({ className }: { className?: string }) => (
-  <svg 
-    xmlns="http://www.w3.org/2000/svg" 
-    viewBox="0 0 1366 369" 
-    className={className} 
-  >
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1366 369" className={className}>
     <g fill="#FFFFFF">
       <path d="M408.34,91.39h48.59l33.57,93.89c.7,1.88,2.58,9.39,5.63,22.53,3.05-13.14,5.16-20.66,5.87-22.53l33.33-93.89h48.59l-70.42,167.83h-34.74l-70.42-167.83Z"/>
       <path d="M595.88,143.5h40.84v115.72h-40.84v-115.72Z"/>
@@ -30,7 +24,6 @@ const VidioohLogo = ({ className }: { className?: string }) => (
       <path d="M1100.3,263.68c-36.85,0-64.55-27.93-64.55-61.97s27.93-61.97,64.55-61.97,64.78,27.7,64.78,61.97-28.17,61.97-64.78,61.97ZM1100.3,173.78c-15.02,0-24.18,10.8-24.18,27.93s9.15,27.7,24.18,27.7,24.18-10.56,24.18-27.7-9.15-27.93-24.18-27.93Z"/>
       <path d="M1188.55,81.53h40.14v62.44c0,7.04-.47,14.32-1.41,20.89,10.56-17.37,23.47-25.12,42.95-25.12,15.02,0,27.23,5.16,34.27,14.08,7.75,9.86,8.45,22.53,8.45,39.2v66.19h-40.84v-61.97c0-18.07-5.4-26.52-19.01-26.52-18.31,0-24.41,13.85-24.41,39.9v48.59h-40.14V81.53Z"/>
     </g>
-    {/* Icono: Usamos la clase "text-vidiooh" del padre o fill="currentColor" */}
     <polygon className="text-vidiooh" fill="currentColor" points="136.72 324.12 30.88 324.12 30.88 49.18 239.73 175.75 96.93 269.17 96.93 172.21 132.36 172.21 132.36 203.66 173.26 176.9 66.31 112.08 66.31 288.69 125.27 288.69 285.07 173.39 89.42 53.11 107.97 22.93 348.89 171.03 136.72 324.12"/>
   </svg>
 )
@@ -172,7 +165,6 @@ export default function LandingPage() {
       <nav className="fixed top-0 w-full z-50 bg-[#020617]/90 backdrop-blur-md border-b border-white/5">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-2 relative z-50">
-            {/* El color del icono se controla desde el SVG usando text-vidiooh */}
             <VidioohLogo className="h-8 md:h-10 w-auto" />
           </div>
 
@@ -223,7 +215,6 @@ export default function LandingPage() {
           </span>
           <h1 className="text-4xl md:text-6xl font-black text-white leading-tight mb-6">
             Plataforma de Optimización <br />
-            {/* Gradiente de marca */}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-vidiooh to-yellow-500">
               para DOOH y Pantallas LED
             </span>
@@ -416,7 +407,8 @@ export default function LandingPage() {
               <div className="mb-8"><h3 className="text-2xl font-bold text-white mb-2">Freelance</h3><p className="text-slate-400 text-sm">Perfecto para empezar y probar.</p></div>
               <div className="mb-8"><span className="text-4xl font-black text-white">S/ 0</span></div>
               <div className="space-y-4 mb-8 flex-1">
-                {["6 videos al mes", "Calidad HD (720p)", "Sin marca de agua (Limpio) ✨", "2 Formatos guardados", "Sin historial (Descarga inmediata)"].map((item, i) => (
+                {/* ✅ LÍMITE 15MB AQUÍ */}
+                {["6 videos al mes", "Máx. 15MB por archivo", "Calidad HD (720p)", "Sin marca de agua (Limpio) ✨", "2 Formatos guardados", "Sin historial (Descarga inmediata)"].map((item, i) => (
                   <div key={i} className="flex items-center gap-3 text-slate-300 text-sm"><CheckCircle2 size={16} className="text-slate-500 shrink-0" />{item}</div>
                 ))}
               </div>
@@ -429,7 +421,8 @@ export default function LandingPage() {
               <div className="mb-8"><h3 className="text-2xl font-bold text-white mb-2">Agencia / Pro</h3><p className="text-vidiooh text-sm">Máxima potencia sin límites.</p></div>
               <div className="mb-8"><div className="flex items-end gap-2"><span className="text-4xl font-black text-white">S/ {activePrice.price}</span><span className="text-slate-500 font-medium mb-1">{activePrice.label}</span></div><p className="text-xs text-vidiooh mt-2 font-medium">{activePrice.note}</p></div>
               <div className="space-y-4 mb-8 flex-1">
-                {["Conversiones Ilimitadas 🔥", "Calidad Full HD (1080p)", "8 Presets Guardados", "Historial de 7 días", "Soporte Prioritario"].map((item, i) => (
+                {/* ✅ LÍMITE 30MB AQUÍ */}
+                {["Conversiones Ilimitadas 🔥", "Máx. 30MB por archivo", "Calidad Full HD (1080p)", "8 Presets Guardados", "Historial de 7 días", "Soporte Prioritario"].map((item, i) => (
                   <div key={i} className="flex items-center gap-3 text-white text-sm"><CheckCircle2 size={16} className="text-vidiooh shrink-0" />{item}</div>
                 ))}
               </div>
@@ -448,7 +441,12 @@ export default function LandingPage() {
                <div>
                  <h3 className="text-2xl md:text-3xl font-bold text-white mb-3">Plan Corporativo / Agencias</h3>
                  <p className="text-slate-400 max-w-lg mb-4">¿Necesitas licencias por volumen (5+ usuarios) o marca blanca total con tu logo?</p>
-                 <div className="flex gap-4 text-xs font-bold text-vidiooh uppercase tracking-wider"><span className="flex items-center gap-1"><CheckCircle2 size={12}/> Formatos Ilimitados</span><span className="flex items-center gap-1"><CheckCircle2 size={12}/> Marca Blanca</span></div>
+                 {/* ✅ LÍMITE 60MB AQUÍ */}
+                 <div className="flex gap-4 text-xs font-bold text-vidiooh uppercase tracking-wider">
+                    <span className="flex items-center gap-1"><CheckCircle2 size={12}/> Máx. 60MB / Video</span>
+                    <span className="flex items-center gap-1"><CheckCircle2 size={12}/> Formatos Ilimitados</span>
+                    <span className="flex items-center gap-1"><CheckCircle2 size={12}/> Marca Blanca</span>
+                 </div>
                </div>
              </div>
              <a href="mailto:ventas@vidiooh.com" className="relative z-10 whitespace-nowrap px-8 py-4 bg-white hover:bg-slate-200 text-black font-bold rounded-xl transition-colors flex items-center gap-2 shadow-xl">Contactar Ventas <ArrowRight size={18} /></a>

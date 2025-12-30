@@ -4,6 +4,7 @@ import React from 'react'
 import { usePathname } from 'next/navigation'
 import BottomNav from '../../components/ui/BottomNav'
 import TopNav from '../../components/ui/TopNav'
+import FeedbackButton from '../../components/FeedbackButton' // <--- 1. IMPORTAR AQUÍ
 // Asegúrate que esta ruta sea correcta hacia el archivo que acabamos de crear arriba
 import { useBlockCheck } from '../../hooks/useBlockCheck'
 
@@ -29,7 +30,7 @@ export default function DashboardLayout({
 
   // 3. SI ES USUARIO NORMAL, RENDERIZAR LA INTERFAZ COMPLETA
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-200 flex flex-col">
+    <div className="min-h-screen bg-[#020617] text-slate-200 flex flex-col relative"> {/* Agregado relative por si acaso */}
       
       {/* Barra Superior */}
       <TopNav />
@@ -53,6 +54,9 @@ export default function DashboardLayout({
           </p>
         </div>
       </main>
+
+      {/* --- 2. BOTÓN DE FEEDBACK (Flotante) --- */}
+      <FeedbackButton />
 
       {/* Barra Inferior */}
       <BottomNav />

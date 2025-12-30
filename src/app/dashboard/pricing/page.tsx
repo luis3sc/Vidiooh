@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { Check, Zap, Shield, Sparkles, Building2, HelpCircle, ArrowRight, Loader2, PaintBucket, FileText, Users } from 'lucide-react'
+import { Check, Zap, Shield, Sparkles, Building2, HelpCircle, ArrowRight, Loader2, PaintBucket, FileText, Users, Cloud } from 'lucide-react'
 import { createBrowserClient } from '@supabase/ssr'
 import Link from 'next/link'
 
@@ -66,9 +66,11 @@ export default function PricingPage() {
 
             <div className="space-y-4 flex-1 mb-8">
               <Feature text="6 videos al mes" />
+              {/* ✅ NUEVO LÍMITE FREE */}
+              <Feature text="Máx. 15MB por archivo" highlight />
+              
               <Feature text="Calidad HD (720p)" />
               <Feature text="2 Formatos guardados" />
-              {/* CAMBIO: Ahora mostramos esto como positivo, no tachado */}
               <Feature text="Videos limpios (Sin marca de agua)" highlight />
               <Feature text="Sin historial en la nube" active={false} />
             </div>
@@ -102,8 +104,10 @@ export default function PricingPage() {
             </p>
 
             <div className="space-y-4 flex-1 mb-8">
-              {/* CAMBIOS: Nuevos límites definidos */}
               <Feature text={<span className="text-white font-bold">45 videos al mes 🔥</span>} highlight />
+              {/* ✅ NUEVO LÍMITE PRO */}
+              <Feature text="Máx. 30MB por archivo" highlight />
+
               <Feature text="Calidad Full HD (1080p)" highlight />
               <Feature text="Videos limpios (Sin marca de agua)" />
               <Feature text="8 Formatos Guardados" />
@@ -147,6 +151,9 @@ export default function PricingPage() {
         
         {/* Features Corporativas */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 pt-8 border-t border-slate-800/50">
+            {/* ✅ NUEVO LÍMITE CORPORATE */}
+            <CorpFeature icon={<Cloud size={16}/>} text="MÁX. 60MB / VIDEO" />
+
             <CorpFeature icon={<PaintBucket size={16}/>} text="MARCA BLANCA (TU LOGO)" />
             <CorpFeature icon={<FileText size={16}/>} text="FACTURA / BOLETA" />
             <CorpFeature icon={<Users size={16}/>} text="ACCESO PARA TU EQUIPO" />
