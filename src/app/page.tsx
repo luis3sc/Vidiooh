@@ -109,6 +109,21 @@ export default function LandingPage() {
     { id: '1280x672', label: '1280 x 672' },
   ]
 
+  // --- 1. DEFINICIÓN DE DATOS ESTRUCTURADOS SEO (JSON-LD) ---
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'Vidiooh',
+    applicationCategory: 'MultimediaApplication',
+    operatingSystem: 'Web',
+    offers: {
+      '@type': 'Offer',
+      price: '0',
+      priceCurrency: 'USD',
+    },
+    description: 'Plataforma de conversión y validación de video para pantallas publicitarias DOOH.',
+  }
+
   return (
     <div className="min-h-screen bg-[#020617] text-white selection:bg-vidiooh selection:text-black font-sans">
       
@@ -480,6 +495,14 @@ export default function LandingPage() {
           <p className="text-[10px] text-slate-600">© 2025 Vidiooh. Tecnología de Aullyk.</p>
         </div>
       </footer>
+
+      {/* --- 2. INYECCIÓN DEL SCRIPT SEO AL FINAL DEL DIV PRINCIPAL --- */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(jsonLd),
+        }}
+      />
     </div>
   )
 }
