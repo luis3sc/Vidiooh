@@ -2,28 +2,27 @@
 
 import React, { useState } from 'react'
 import Link from 'next/link'
-import { createBrowserClient } from '@supabase/ssr' // Usamos createBrowserClient directamente
-import { Lock, Mail, Loader2, AlertCircle, ArrowLeft, ArrowRight, CheckCircle2 } from 'lucide-react'
+import { createBrowserClient } from '@supabase/ssr' 
+// 1. Agregamos 'User' a los iconos
+import { Lock, Mail, Loader2, AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, User } from 'lucide-react'
 
-// --- COMPONENTE ICONO VIDIOOH (ACTUALIZADO - VERSIÓN MÁS GRANDE) ---
+// --- COMPONENTE ICONO VIDIOOH ---
 const VidioohIcon = ({ className }: { className?: string }) => (
   <svg 
     xmlns="http://www.w3.org/2000/svg" 
     viewBox="0 0 494.22 494.22"
     className={className}
-    fill="currentColor" // Hereda el color del texto del padre
+    fill="currentColor" 
   >
     <polygon points="167.38 472.94 8.67 472.94 8.67 60.65 321.86 250.45 107.71 390.55 107.71 245.14 160.84 245.14 160.84 292.3 222.19 252.17 61.8 154.98 61.8 419.81 150.22 419.81 389.85 246.91 96.45 66.54 124.28 21.28 485.56 243.38 167.38 472.94"/>
   </svg>
 )
-// --------------------------------------------------
 
 export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   
-  // Instancia del cliente de Supabase
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -35,16 +34,21 @@ export default function RegisterPage() {
     setError(null)
 
     const formData = new FormData(e.currentTarget)
+    // 2. Capturamos el nombre
+    const name = formData.get('name') as string
     const email = formData.get('email') as string
     const password = formData.get('password') as string
 
-    // REGISTRO CON REDIRECCIÓN AL CALLBACK
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        // Esto es clave: redirige a tu ruta /auth/callback después de validar el correo
         emailRedirectTo: `${location.origin}/auth/callback`,
+        // 3. ENVIAMOS EL NOMBRE A SUPABASE (METADATA)
+        data: {
+            first_name: name, // Esto es lo que usará el Email Template
+            full_name: name   // Por si acaso lo necesites luego
+        }
       },
     })
 
@@ -60,7 +64,6 @@ export default function RegisterPage() {
   if (success) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#020617] p-4 text-center relative overflow-hidden">
-        {/* Fondo decorativo */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
             <div className="absolute top-[30%] left-[30%] w-[40%] h-[40%] rounded-full bg-vidiooh/10 blur-[120px]" />
         </div>
@@ -80,7 +83,6 @@ export default function RegisterPage() {
           </Link>
         </div>
 
-        {/* --- FOOTER AYLLUK (SUCCESS STATE) --- */}
         <div className="absolute bottom-6 w-full text-center z-20">
           <p className="text-[10px] md:text-xs text-slate-600 font-medium tracking-wide">
             © 2025 Vidiooh. Tecnología desarrollada por <span className="text-slate-500 font-bold hover:text-vidiooh transition-colors cursor-default">Aylluk</span>.
@@ -93,7 +95,6 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#020617] p-4 relative">
       
-      {/* --- BOTÓN VOLVER AL INICIO --- */}
       <Link 
         href="/" 
         className="absolute top-6 left-6 md:top-10 md:left-10 flex items-center gap-2 text-slate-400 hover:text-white transition-colors group z-10"
@@ -104,7 +105,6 @@ export default function RegisterPage() {
         <span className="text-sm font-medium hidden md:block">Volver al inicio</span>
       </Link>
 
-      {/* Fondo decorativo */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -bottom-[20%] -right-[10%] w-[50%] h-[50%] rounded-full bg-vidiooh/5 blur-[100px]" />
         <div className="absolute top-[20%] -left-[10%] w-[40%] h-[40%] rounded-full bg-vidiooh/5 blur-[100px]" />
@@ -115,7 +115,6 @@ export default function RegisterPage() {
         <div className="text-center mb-6">
           <Link href="/" className="inline-flex items-center gap-2 mb-4 hover:opacity-80 transition-opacity">
              <div className="w-10 h-10 bg-vidiooh rounded-xl flex items-center justify-center">
-                {/* --- NUEVO ICONO SVG --- */}
                 <VidioohIcon className="text-black w-6 h-6" /> 
              </div>
           </Link>
@@ -123,7 +122,6 @@ export default function RegisterPage() {
           <p className="text-slate-400 text-sm">Únete para empezar a convertir videos.</p>
         </div>
 
-        {/* --- LISTA DE BENEFICIOS --- */}
         <div className="flex justify-center gap-4 mb-8 text-xs text-slate-300 font-medium">
             <div className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-vidiooh" /> Sin marca de agua</div>
             <div className="flex items-center gap-1.5"><CheckCircle2 size={14} className="text-vidiooh" /> Calidad HD</div>
@@ -138,6 +136,23 @@ export default function RegisterPage() {
         )}
 
         <form onSubmit={handleRegister} className="space-y-5">
+          
+          {/* --- 4. NUEVO CAMPO NOMBRE --- */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-400 ml-1 uppercase">Tu Nombre</label>
+            <div className="relative group">
+              <User className="absolute left-4 top-3.5 text-slate-500 group-focus-within:text-vidiooh transition-colors" size={20} />
+              <input 
+                name="name" 
+                type="text" 
+                placeholder="Juan Pérez" 
+                className="w-full bg-[#0f141c] border border-slate-800 text-white rounded-xl py-3.5 pl-12 pr-4 focus:border-vidiooh focus:ring-1 focus:ring-[#F04E30] outline-none transition-all placeholder:text-slate-600" 
+                required 
+              />
+            </div>
+          </div>
+          {/* --------------------------- */}
+
           <div className="space-y-2">
             <label className="text-xs font-bold text-slate-400 ml-1 uppercase">Correo Electrónico</label>
             <div className="relative group">
@@ -184,7 +199,6 @@ export default function RegisterPage() {
 
       </div>
 
-      {/* --- FOOTER AYLLUK (FORM STATE) --- */}
       <div className="absolute bottom-6 w-full text-center z-0">
         <p className="text-[10px] md:text-xs text-slate-600 font-medium tracking-wide">
           © 2025 Vidiooh. Tecnología desarrollada por <span className="text-slate-500 font-bold hover:text-vidiooh transition-colors cursor-default">Aylluk</span>.
