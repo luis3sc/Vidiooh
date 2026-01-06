@@ -35,11 +35,11 @@ export const metadata: Metadata = {
   authors: [{ name: 'Vidiooh Team' }],
   creator: 'Aylluk Technology',
   
-  // ✅ CORRECCIÓN DE ICONOS SEGÚN TU CARPETA PUBLIC
+  // ✅ ICONOS (Configuración correcta según tu carpeta public)
   icons: {
-    icon: '/favicon.ico',                 // Tienes este archivo
-    shortcut: '/android-chrome-192x192.png', // Usamos este para Android/PC
-    apple: '/apple-touch-icon.png',       // Usamos este para iPhone
+    icon: '/favicon.ico',                 
+    shortcut: '/android-chrome-192x192.png', 
+    apple: '/apple-touch-icon.png',       
   },
   
   openGraph: {
@@ -83,7 +83,7 @@ export default function RootLayout({
     <html lang="es">
       <body className={`${inter.className} bg-[#020617] text-white antialiased`}>
         
-        {/* --- MICROSOFT CLARITY --- */}
+        {/* --- 1. MICROSOFT CLARITY --- */}
         <Script id="clarity-script" strategy="afterInteractive">
           {`
             (function(c,l,a,r,i,t,y){
@@ -91,6 +91,39 @@ export default function RootLayout({
                 t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
                 y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
             })(window, document, "clarity", "script", "uwvwbq90rm");
+          `}
+        </Script>
+
+        {/* --- 2. DATOS ESTRUCTURADOS (SITELINKS JSON-LD) --- */}
+        {/* Esto ayuda a Google a entender tus secciones clave (Login, Registro, etc.) */}
+        <Script id="schema-sitelinks" type="application/ld+json">
+          {`
+            {
+              "@context": "https://schema.org",
+              "@type": "WebSite",
+              "name": "Vidiooh",
+              "url": "https://vidiooh.com",
+              "hasPart": [
+                {
+                  "@type": "WebPage",
+                  "name": "Iniciar Sesión",
+                  "description": "Accede a tu panel de control Vidiooh",
+                  "url": "https://vidiooh.com/login"
+                },
+                {
+                  "@type": "WebPage",
+                  "name": "Crear Cuenta",
+                  "description": "Regístrate gratis y empieza a optimizar",
+                  "url": "https://vidiooh.com/register"
+                },
+                {
+                  "@type": "WebPage",
+                  "name": "Términos y Condiciones",
+                  "description": "Nuestras políticas de uso",
+                  "url": "https://vidiooh.com/terms"
+                }
+              ]
+            }
           `}
         </Script>
 
