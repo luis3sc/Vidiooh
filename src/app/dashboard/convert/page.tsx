@@ -44,12 +44,14 @@ const FeedbackModal = ({ type, isOpen, onClose, data }: FeedbackModalProps) => {
         },
         limit: {
             icon: <Sparkles size={48} className="text-yellow-400 animate-pulse" />,
-            title: "Límite del Plan Alcanzado",
-            description: `Has consumido ${data?.used}/${data?.limit} conversiones de tu plan este mes. ¡No detengas tu flujo de trabajo!`,
+            title: "Función Premium Detectada", // Título genérico para límites o funciones PRO
+            description: data?.limit === 0 
+                ? "El almacenamiento en la nube es exclusivo para miembros PRO. Actualiza tu plan para guardar tu historial de campañas." // Mensaje específico para la nube
+                : `Has consumido ${data?.used}/${data?.limit} conversiones de tu plan este mes. ¡No detengas tu flujo de trabajo!`,
             extra: (
                 <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800 my-4 text-left text-sm text-slate-300">
                     <p className="flex items-center gap-2 mb-2"><CheckCircle2 size={16} className="text-vidiooh"/> Aumentar Capacidad</p>
-                    <p className="flex items-center gap-2"><CheckCircle2 size={16} className="text-vidiooh"/> Historial Extendido</p>
+                    <p className="flex items-center gap-2"><CheckCircle2 size={16} className="text-vidiooh"/> Historial en la Nube</p>
                 </div>
             ),
             buttonText: "Mejorar mi Plan",
@@ -324,7 +326,8 @@ export default function ConvertPage() {
       setFinalOutputName(finalName)
 
       let storagePath = null
-      if (shouldSaveToCloud) {
+      // SOLO SUBIR SI NO ES FREE Y EL CHECK ESTÁ ACTIVO
+      if (shouldSaveToCloud && userPlan !== 'FREE') {
           storagePath = `${user.id}/${Date.now()}_${finalName}`
           const { error: uploadError } = await supabase.storage
               .from('raw-videos')
@@ -612,23 +615,74 @@ export default function ConvertPage() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between p-3 bg-slate-900/50 rounded-xl border border-slate-800 transition-all hover:border-slate-700">
-                <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${shouldSaveToCloud ? 'bg-vidiooh/10 text-vidiooh' : 'bg-slate-800 text-slate-500'}`}>
-                        {shouldSaveToCloud ? <Cloud size={18}/> : <CloudOff size={18}/>}
-                    </div>
-                    <div>
-                        <p className="text-xs font-bold text-white">Guardar en Historial (Nube)</p>
-                        <p className="text-[10px] text-slate-500">
-                            {shouldSaveToCloud ? 'El video se guardará en tu cuenta.' : 'Solo se descargará localmente.'}
-                        </p>
-                    </div>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" checked={shouldSaveToCloud} onChange={(e) => setShouldSaveToCloud(e.target.checked)} className="sr-only peer" />
-                    <div className="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-vidiooh"></div>
-                </label>
-          </div>
+          {/* --- BLOQUE DE GUARDADO EN NUBE (LOGICA PREMIUM INTEGRADA) --- */}
+          {(() => {
+            const isFreeUser = userPlan === 'FREE'
+
+            const handleCloudToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+               if (isFreeUser) {
+                  // Si es gratis, NO activamos el check y configuramos el modal para upsell
+                  setModalData({ used: 0, limit: 0 }) 
+                  setModalType('limit') 
+                  return
+               }
+               setShouldSaveToCloud(e.target.checked)
+            }
+
+            return (
+              <div 
+                onClick={() => isFreeUser && setModalType('limit')} // Click en todo el div dispara el upsell para usuarios free
+                className={`
+                  flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer select-none
+                  ${isFreeUser 
+                    ? 'bg-slate-900/30 border-slate-800 opacity-70 hover:opacity-100 hover:border-slate-700' 
+                    : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'
+                  }
+                `}
+              >
+                  <div className="flex items-center gap-3">
+                      <div className={`
+                          p-2 rounded-lg relative
+                          ${shouldSaveToCloud ? 'bg-vidiooh/10 text-vidiooh' : 'bg-slate-800 text-slate-500'}
+                      `}>
+                          {/* Icono condicional: Candado para FREE, Nube para PRO */}
+                          {isFreeUser ? <Lock size={18} className="text-amber-500" /> : (shouldSaveToCloud ? <Cloud size={18}/> : <CloudOff size={18}/>)}
+                      </div>
+                      <div>
+                          <p className="text-xs font-bold text-white flex items-center gap-2">
+                              Guardar en Historial
+                              {isFreeUser && <span className="bg-amber-500 text-black text-[9px] px-1.5 py-0.5 rounded font-black uppercase tracking-wide">PRO</span>}
+                          </p>
+                          <p className="text-[10px] text-slate-500 leading-tight mt-0.5">
+                              {isFreeUser 
+                                ? 'Actualiza tu plan para guardar tus videos.' 
+                                : (shouldSaveToCloud ? 'El video se guardará en tu cuenta.' : 'Solo se descargará localmente.')
+                              }
+                          </p>
+                      </div>
+                  </div>
+                  
+                  {/* Switch */}
+                  <label className="relative inline-flex items-center cursor-pointer pointer-events-none">
+                      <input 
+                        type="checkbox" 
+                        checked={!isFreeUser && shouldSaveToCloud} 
+                        onChange={handleCloudToggle}
+                        className="sr-only peer" 
+                        disabled={isFreeUser}
+                      />
+                      <div className={`
+                        w-9 h-5 rounded-full peer peer-focus:outline-none 
+                        after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all 
+                        ${isFreeUser 
+                            ? 'bg-slate-800 after:bg-slate-500' // Estilo deshabilitado
+                            : 'bg-slate-700 peer-checked:bg-vidiooh peer-checked:after:translate-x-full peer-checked:after:border-white' // Estilo activo
+                        }
+                      `}></div>
+                  </label>
+              </div>
+            )
+          })()}
 
         </div>
       </div>
