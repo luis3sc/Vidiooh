@@ -1,25 +1,21 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import Script from "next/script"; // ✅ NUEVO IMPORT PARA ANALYTICS
+import Script from "next/script"; 
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
 
 // --- CONFIGURACIÓN SEO Y METADATA ---
 export const metadata: Metadata = {
-  // 1. URL Base (Obligatorio para que las imágenes de redes sociales funcionen)
   metadataBase: new URL('https://vidiooh.com'),
   
-  // 2. Título Inteligente
   title: {
     default: 'Vidiooh | Optimización de Video para Pantallas LED y DOOH',
-    template: '%s | Vidiooh' // Así tus otras páginas dirán "Login | Vidiooh"
+    template: '%s | Vidiooh' 
   },
   
-  // 3. Descripción Potente para Google
   description: 'Plataforma estándar para Agencias y Operadores. Convierte, comprime y valida videos para pantallas LED gigantes, mupis y circuitos DOOH sin perder calidad.',
   
-  // 4. Palabras Clave (Keywords) - Lista Ampliada
   keywords: [
     'OOH', 
     'DOOH', 
@@ -36,19 +32,16 @@ export const metadata: Metadata = {
     'Pixel Perfect'
   ],
   
-  // 5. Autores y Creador
   authors: [{ name: 'Vidiooh Team' }],
   creator: 'Aylluk Technology',
   
-  // 6. Configuración de Iconos (Favicon Completo)
-  // Asegúrate de tener los archivos en la carpeta /public
+  // ✅ CORRECCIÓN DE ICONOS SEGÚN TU CARPETA PUBLIC
   icons: {
-    icon: '/favicon.ico',        // Icono pequeño (Pestaña navegador)
-    shortcut: '/icon.png',       // Icono accesos directos (Android)
-    apple: '/icon.png',          // Icono para iPhone/iPad
+    icon: '/favicon.ico',                 // Tienes este archivo
+    shortcut: '/android-chrome-192x192.png', // Usamos este para Android/PC
+    apple: '/apple-touch-icon.png',       // Usamos este para iPhone
   },
   
-  // 7. Open Graph (Facebook, LinkedIn, WhatsApp)
   openGraph: {
     title: 'Vidiooh - Automatiza tu tráfico digital',
     description: 'Deja de devolver materiales por formato incorrecto. Estandariza tus videos para pantallas LED en segundos.',
@@ -58,7 +51,7 @@ export const metadata: Metadata = {
     type: 'website',
     images: [
       {
-        url: '/og-image.png', // Imagen de 1200x630px en public/
+        url: '/og-image.png', 
         width: 1200,
         height: 630,
         alt: 'Vidiooh Dashboard Preview',
@@ -66,18 +59,16 @@ export const metadata: Metadata = {
     ],
   },
 
-  // 8. Twitter Cards (Para X/Twitter)
   twitter: {
     card: 'summary_large_image',
     title: 'Vidiooh | Optimización DOOH',
     description: 'Convierte videos para pantallas LED en segundos.',
-    images: ['/og-image.png'], // Reusa la misma imagen
+    images: ['/og-image.png'], 
   },
 };
 
-// --- VIEWPORT (Zoom y Colores) ---
 export const viewport: Viewport = {
-  themeColor: '#0f141c', // Color de la barra de estado en Android
+  themeColor: '#0f141c', 
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
@@ -92,8 +83,7 @@ export default function RootLayout({
     <html lang="es">
       <body className={`${inter.className} bg-[#020617] text-white antialiased`}>
         
-        {/* --- MICROSOFT CLARITY (Optimizado para Next.js) --- */}
-        {/* strategy="afterInteractive" asegura que no bloquee la carga inicial */}
+        {/* --- MICROSOFT CLARITY --- */}
         <Script id="clarity-script" strategy="afterInteractive">
           {`
             (function(c,l,a,r,i,t,y){
