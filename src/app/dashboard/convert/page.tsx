@@ -2,7 +2,6 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { useDropzone, FileRejection } from 'react-dropzone'
-// Importamos iconos adicionales para la alerta (Thermometer, Cpu)
 import { Upload, Video, Zap, X, FileVideo, Download, Loader2, CheckCircle2, AlertTriangle, ArrowRight, Lock, Ban, Sparkles, FileWarning, Cloud, CloudOff, Radio, Cpu, Thermometer } from 'lucide-react'
 import { useFFmpeg } from '../../../hooks/useFFmpeg'
 import { fetchFile } from '@ffmpeg/util'
@@ -11,7 +10,6 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import FeedbackButton from '../../../components/FeedbackButton'
 import { useKeepAlive } from '../../../hooks/useKeepAlive'
-// 1. IMPORTAR EL NUEVO HOOK DE HARDWARE
 import { useHardwareCheck } from '../../../hooks/useHardwareCheck'
 
 // --- CONSTANTES DE LÍMITES (EN BYTES) ---
@@ -44,10 +42,10 @@ const FeedbackModal = ({ type, isOpen, onClose, data }: FeedbackModalProps) => {
         },
         limit: {
             icon: <Sparkles size={48} className="text-yellow-400 animate-pulse" />,
-            title: "Función Premium Detectada", // Título genérico para límites o funciones PRO
+            title: "Función Premium Detectada",
             description: data?.limit === 0 
-                ? "El almacenamiento en la nube es exclusivo para miembros PRO. Actualiza tu plan para guardar tu historial de campañas." // Mensaje específico para la nube
-                : `Has consumido ${data?.used}/${data?.limit} conversiones de tu plan este mes. ¡No detengas tu flujo de trabajo!`,
+                ? "El almacenamiento en la nube es exclusivo para miembros PRO y CORPORATE. Actualiza tu plan para guardar tu historial."
+                : `Has consumido ${data?.used}/${data?.limit} conversiones de tu plan este mes.`,
             extra: (
                 <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800 my-4 text-left text-sm text-slate-300">
                     <p className="flex items-center gap-2 mb-2"><CheckCircle2 size={16} className="text-vidiooh"/> Aumentar Capacidad</p>
@@ -157,8 +155,6 @@ export default function ConvertPage() {
   const downloadLinkRef = useRef<HTMLAnchorElement>(null)
 
   const isBackgroundSafe = useKeepAlive(isProcessing)
-  
-  // 2. USAR EL HOOK DE HARDWARE
   const { isLowSpec } = useHardwareCheck()
 
   useEffect(() => { load() }, [])
@@ -185,8 +181,11 @@ export default function ConvertPage() {
         .eq('id', user.id)
         .single()
       
+      // Aseguramos Mayúsculas (toUpperCase)
       // @ts-ignore
-      const actualPlan = profile?.teams?.plan_type || profile?.plan_type || 'FREE'
+      const rawPlan = profile?.teams?.plan_type || profile?.plan_type || 'FREE'
+      const actualPlan = rawPlan.toUpperCase()
+      
       setUserPlan(actualPlan)
       
       const limit = PLAN_SIZE_LIMITS[actualPlan] || PLAN_SIZE_LIMITS.FREE
@@ -274,7 +273,8 @@ export default function ConvertPage() {
       }
 
       // @ts-ignore
-      const actualPlan = profile?.teams?.plan_type || profile?.plan_type || 'FREE'
+      const rawPlan = profile?.teams?.plan_type || profile?.plan_type || 'FREE'
+      const actualPlan = rawPlan.toUpperCase()
 
       const PLAN_LIMITS: Record<string, number> = {
           FREE: 6,
@@ -326,8 +326,9 @@ export default function ConvertPage() {
       setFinalOutputName(finalName)
 
       let storagePath = null
-      // SOLO SUBIR SI NO ES FREE Y EL CHECK ESTÁ ACTIVO
-      if (shouldSaveToCloud && userPlan !== 'FREE') {
+      
+      // Permitir subida si NO es FREE (PRO o CORPORATE)
+      if (shouldSaveToCloud && actualPlan !== 'FREE') {
           storagePath = `${user.id}/${Date.now()}_${finalName}`
           const { error: uploadError } = await supabase.storage
               .from('raw-videos')
@@ -379,7 +380,6 @@ export default function ConvertPage() {
     </button>
   )
 
-  // COMPONENTE DE ALERTA PARA PC LENTA
   const LowSpecAlert = () => {
     if (!isLowSpec) return null;
     return (
@@ -408,7 +408,6 @@ export default function ConvertPage() {
       
       <FeedbackModal isOpen={!!modalType} type={modalType} onClose={() => setModalType(null)} data={modalData} />
 
-      {/* --- MODAL DE CARGA (OVERLAY) --- */}
       {(isProcessing || videoUrl) && (
         <div className="fixed inset-0 z-[100] bg-[#020617]/95 backdrop-blur-xl flex flex-col items-center justify-center animate-in fade-in duration-300 p-4">
           
@@ -433,7 +432,6 @@ export default function ConvertPage() {
                 {PROCESSING_STEPS[currentStep]}
               </p>
               
-              {/* ALERTA EN PANTALLA DE CARGA TAMBIÉN SI ES LENTA */}
               {isLowSpec && (
                   <p className="mt-4 text-[10px] text-amber-400 bg-amber-900/30 px-3 py-1 rounded-full border border-amber-900/50 flex items-center gap-2">
                       <Cpu size={10} /> Optimizando para tu equipo... no cierres la pestaña.
@@ -534,7 +532,6 @@ export default function ConvertPage() {
             )}
 
             <div className="hidden md:block mt-6">
-                {/* 3. AÑADIMOS LA ALERTA ANTES DEL BOTÓN DE ESCRITORIO */}
                 <LowSpecAlert />
                 <ConvertButton />
             </div>
@@ -615,26 +612,27 @@ export default function ConvertPage() {
             </div>
           </div>
 
-          {/* --- BLOQUE DE GUARDADO EN NUBE (LOGICA PREMIUM INTEGRADA) --- */}
+          {/* --- BLOQUE DE GUARDADO EN NUBE (LOGICA PREMIUM/CORPORATE) --- */}
           {(() => {
-            const isFreeUser = userPlan === 'FREE'
+            const isPremium = userPlan !== 'FREE';
 
             const handleCloudToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
-               if (isFreeUser) {
-                  // Si es gratis, NO activamos el check y configuramos el modal para upsell
+               if (!isPremium) {
+                  // Si es FREE, mostramos el modal de ventas
                   setModalData({ used: 0, limit: 0 }) 
                   setModalType('limit') 
                   return
                }
+               // Si es PRO o CORPORATE, permitimos cambiar el check
                setShouldSaveToCloud(e.target.checked)
             }
 
             return (
               <div 
-                onClick={() => isFreeUser && setModalType('limit')} // Click en todo el div dispara el upsell para usuarios free
+                onClick={() => !isPremium && setModalType('limit')}
                 className={`
                   flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer select-none
-                  ${isFreeUser 
+                  ${!isPremium 
                     ? 'bg-slate-900/30 border-slate-800 opacity-70 hover:opacity-100 hover:border-slate-700' 
                     : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'
                   }
@@ -645,16 +643,15 @@ export default function ConvertPage() {
                           p-2 rounded-lg relative
                           ${shouldSaveToCloud ? 'bg-vidiooh/10 text-vidiooh' : 'bg-slate-800 text-slate-500'}
                       `}>
-                          {/* Icono condicional: Candado para FREE, Nube para PRO */}
-                          {isFreeUser ? <Lock size={18} className="text-amber-500" /> : (shouldSaveToCloud ? <Cloud size={18}/> : <CloudOff size={18}/>)}
+                          {!isPremium ? <Lock size={18} className="text-amber-500" /> : (shouldSaveToCloud ? <Cloud size={18}/> : <CloudOff size={18}/>)}
                       </div>
                       <div>
                           <p className="text-xs font-bold text-white flex items-center gap-2">
                               Guardar en Historial
-                              {isFreeUser && <span className="bg-amber-500 text-black text-[9px] px-1.5 py-0.5 rounded font-black uppercase tracking-wide">PRO</span>}
+                              {!isPremium && <span className="bg-amber-500 text-black text-[9px] px-1.5 py-0.5 rounded font-black uppercase tracking-wide">PRO</span>}
                           </p>
                           <p className="text-[10px] text-slate-500 leading-tight mt-0.5">
-                              {isFreeUser 
+                              {!isPremium 
                                 ? 'Actualiza tu plan para guardar tus videos.' 
                                 : (shouldSaveToCloud ? 'El video se guardará en tu cuenta.' : 'Solo se descargará localmente.')
                               }
@@ -662,21 +659,21 @@ export default function ConvertPage() {
                       </div>
                   </div>
                   
-                  {/* Switch */}
-                  <label className="relative inline-flex items-center cursor-pointer pointer-events-none">
+                  {/* --- AQUÍ ESTABA EL ERROR: pointer-events-none ahora es condicional --- */}
+                  <label className={`relative inline-flex items-center cursor-pointer ${!isPremium ? 'pointer-events-none' : ''}`}>
                       <input 
                         type="checkbox" 
-                        checked={!isFreeUser && shouldSaveToCloud} 
+                        checked={isPremium && shouldSaveToCloud} 
                         onChange={handleCloudToggle}
                         className="sr-only peer" 
-                        disabled={isFreeUser}
+                        disabled={!isPremium}
                       />
                       <div className={`
                         w-9 h-5 rounded-full peer peer-focus:outline-none 
                         after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all 
-                        ${isFreeUser 
-                            ? 'bg-slate-800 after:bg-slate-500' // Estilo deshabilitado
-                            : 'bg-slate-700 peer-checked:bg-vidiooh peer-checked:after:translate-x-full peer-checked:after:border-white' // Estilo activo
+                        ${!isPremium 
+                            ? 'bg-slate-800 after:bg-slate-500' 
+                            : 'bg-slate-700 peer-checked:bg-vidiooh peer-checked:after:translate-x-full peer-checked:after:border-white' 
                         }
                       `}></div>
                   </label>
@@ -692,7 +689,6 @@ export default function ConvertPage() {
           <div className="relative w-full px-4 pb-6 pt-12 pointer-events-auto flex flex-col items-center">
               <div className="w-full max-w-md">
                  <div className="shadow-[0_10px_30px_-10px_rgba(0,0,0,0.8)] rounded-full mb-2"> 
-                    {/* 4. AÑADIMOS LA ALERTA ANTES DEL BOTÓN DE MÓVIL TAMBIÉN */}
                     <LowSpecAlert />
                     <ConvertButton mobile={true} />
                  </div>

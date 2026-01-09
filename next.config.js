@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // CONFIGURACIÓN CRÍTICA PARA FFMPEG.WASM
-  // Sin esto, el navegador bloqueará la conversión de video
+  // Solución para que funcionen FFmpeg + Clarity + Imágenes externas
   async headers() {
     return [
       {
@@ -9,7 +8,7 @@ const nextConfig = {
         headers: [
           {
             key: 'Cross-Origin-Embedder-Policy',
-            value: 'require-corp',
+            value: 'credentialless', // <--- CAMBIO CLAVE AQUÍ (Antes era 'require-corp')
           },
           {
             key: 'Cross-Origin-Opener-Policy',
