@@ -2,7 +2,8 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { useDropzone, FileRejection } from 'react-dropzone'
-import { Upload, Video, Zap, X, FileVideo, Download, Loader2, CheckCircle2, AlertTriangle, ArrowRight, Lock, Ban, Sparkles, FileWarning, Cloud, CloudOff, Radio, Cpu, Thermometer } from 'lucide-react'
+// Agregamos iconos para diferenciar imagen de video
+import { Upload, Video, Zap, X, FileVideo, Download, Loader2, CheckCircle2, AlertTriangle, ArrowRight, Lock, Ban, Sparkles, FileWarning, Cloud, CloudOff, Radio, Cpu, Thermometer, Image as ImageIcon, Film } from 'lucide-react'
 import { useFFmpeg } from '../../../hooks/useFFmpeg'
 import { fetchFile } from '@ffmpeg/util'
 import { createBrowserClient } from '@supabase/ssr'
@@ -35,7 +36,7 @@ const FeedbackModal = ({ type, isOpen, onClose, data }: FeedbackModalProps) => {
         error: {
             icon: <FileWarning size={48} className="text-red-500" />,
             title: "Archivo demasiado pesado",
-            description: `Tu plan actual solo permite videos de hasta ${data?.maxFileSize || '15MB'}. Para procesar archivos más grandes, mejora tu membresía.`,
+            description: `Tu plan actual solo permite archivos de hasta ${data?.maxFileSize || '15MB'}. Para procesar materiales más grandes, mejora tu membresía.`,
             buttonText: "Entendido, subiré otro",
             buttonColor: "bg-slate-800 hover:bg-slate-700 text-white",
             action: onClose
@@ -108,12 +109,13 @@ const FeedbackModal = ({ type, isOpen, onClose, data }: FeedbackModalProps) => {
 
 // --- PÁGINA PRINCIPAL ---
 
+// Pasos genéricos para que sirvan tanto para video como imagen
 const PROCESSING_STEPS = [
   "Iniciando motor...",
-  "Calculando duración...",
-  "Ajustando velocidad...",
-  "Redimensionando...",
-  "Eliminando audio...",
+  "Analizando entrada...",
+  "Configurando salida...",
+  "Renderizando video...",
+  "Optimizando bitrate...",
   "Subiendo a la nube...",
   "Guardando registro..."
 ]
@@ -181,7 +183,6 @@ export default function ConvertPage() {
         .eq('id', user.id)
         .single()
       
-      // Aseguramos Mayúsculas (toUpperCase)
       // @ts-ignore
       const rawPlan = profile?.teams?.plan_type || profile?.plan_type || 'FREE'
       const actualPlan = rawPlan.toUpperCase()
@@ -219,21 +220,40 @@ export default function ConvertPage() {
       const selectedFile = acceptedFiles[0]
       setFile(selectedFile)
       setVideoUrl(null)
-      const videoEl = document.createElement('video')
-      videoEl.preload = 'metadata'
-      videoEl.src = URL.createObjectURL(selectedFile)
-      videoEl.onloadedmetadata = () => {
-        window.URL.revokeObjectURL(videoEl.src)
-        const w = videoEl.videoWidth
-        const h = videoEl.videoHeight
-        setVideoMeta({ w, h, orientation: getOrientation(w, h) })
+      
+      // Detectar tipo de archivo para extraer metadata
+      if (selectedFile.type.startsWith('image/')) {
+          // Lógica para IMÁGENES (cargar en objeto Image)
+          const img = new Image()
+          img.src = URL.createObjectURL(selectedFile)
+          img.onload = () => {
+              const w = img.width
+              const h = img.height
+              setVideoMeta({ w, h, orientation: getOrientation(w, h) })
+              // No liberamos URL.revokeObjectURL aquí para usarla en preview si queremos
+          }
+      } else {
+          // Lógica para VIDEOS (cargar en elemento Video)
+          const videoEl = document.createElement('video')
+          videoEl.preload = 'metadata'
+          videoEl.src = URL.createObjectURL(selectedFile)
+          videoEl.onloadedmetadata = () => {
+            window.URL.revokeObjectURL(videoEl.src)
+            const w = videoEl.videoWidth
+            const h = videoEl.videoHeight
+            setVideoMeta({ w, h, orientation: getOrientation(w, h) })
+          }
       }
     }
   }, [currentSizeLimit])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'video/*': ['.mp4', '.mov', '.avi'] },
+    // ACEPTAMOS VIDEO E IMÁGENES
+    accept: { 
+        'video/*': ['.mp4', '.mov', '.avi'],
+        'image/*': ['.jpg', '.jpeg', '.png', '.webp']
+    },
     maxFiles: 1,
     maxSize: currentSizeLimit 
   })
@@ -303,21 +323,47 @@ export default function ConvertPage() {
           }
       }
 
-      await ffmpeg.writeFile('input.mp4', await fetchFile(file))
+      // --- 1. LÓGICA DE DETECCIÓN DE TIPO DE ARCHIVO ---
+      const isImage = file.type.startsWith('image/')
+      const inputName = isImage ? `input.${file.name.split('.').pop()}` : 'input.mp4'
+      
+      // Escribir archivo en memoria virtual de FFmpeg
+      await ffmpeg.writeFile(inputName, await fetchFile(file))
       
       const format = formats.find(f => f.id === selectedFormatId) || formats[0]
       const safeW = format.w % 2 === 0 ? format.w : format.w - 1
       const safeH = format.h % 2 === 0 ? format.h : format.h - 1
 
-      const tempVideo = document.createElement('video')
-      tempVideo.src = URL.createObjectURL(file)
-      await new Promise((resolve) => { tempVideo.onloadedmetadata = () => resolve(true) })
-      const ptsFactor = duration / (tempVideo.duration || 10)
+      // --- 2. EJECUCIÓN DE FFMPEG SEGÚN TIPO ---
+      if (isImage) {
+          // *** MODO IMAGEN A VIDEO ***
+          // -loop 1: Repite la imagen indefinidamente
+          // -t duration: Corta el video a la duración deseada
+          // scale=...:force_original_aspect_ratio=decrease: Escala la imagen para que QUEPA dentro de la caja sin recortarse
+          // pad=...: Rellena con negro lo que sobre (Letterboxing) para llegar a la resolución final
+          await ffmpeg.exec([
+            '-loop', '1',
+            '-i', inputName,
+            '-vf', `scale=${safeW}:${safeH}:force_original_aspect_ratio=decrease,pad=${safeW}:${safeH}:(ow-iw)/2:(oh-ih)/2`, 
+            '-c:v', 'libx264',
+            '-t', duration.toString(),
+            '-pix_fmt', 'yuv420p', // Formato de color compatible con todos los players/pantallas LED
+            '-preset', 'ultrafast',
+            'output.mp4'
+          ])
+      } else {
+          // *** MODO VIDEO A VIDEO (Lógica original) ***
+          const tempVideo = document.createElement('video')
+          tempVideo.src = URL.createObjectURL(file)
+          await new Promise((resolve) => { tempVideo.onloadedmetadata = () => resolve(true) })
+          const ptsFactor = duration / (tempVideo.duration || 10)
 
-      await ffmpeg.exec([
-        '-i', 'input.mp4', '-vf', `scale=${safeW}:${safeH},setsar=1:1,setpts=${ptsFactor}*PTS`,
-        '-an', '-c:v', 'libx264', '-preset', 'ultrafast', 'output.mp4'
-      ])
+          await ffmpeg.exec([
+            '-i', inputName, 
+            '-vf', `scale=${safeW}:${safeH},setsar=1:1,setpts=${ptsFactor}*PTS`,
+            '-an', '-c:v', 'libx264', '-preset', 'ultrafast', 'output.mp4'
+          ])
+      }
 
       const data = await ffmpeg.readFile('output.mp4')
       const outputBlob = new Blob([data as any], { type: 'video/mp4' })
@@ -376,7 +422,8 @@ export default function ConvertPage() {
         `}
     >
        {formats.length === 0 ? <Lock size={20}/> : <Video size={20} />}
-       {formats.length === 0 ? "CREA UN FORMATO" : "PROCESAR VIDEO"}
+       {/* Texto dinámico según tipo de archivo */}
+       {formats.length === 0 ? "CREA UN FORMATO" : (file?.type.startsWith('image/') ? "ANIMAR IMAGEN" : "PROCESAR VIDEO")}
     </button>
   )
 
@@ -497,7 +544,8 @@ export default function ConvertPage() {
               {file ? (
                 <div className="text-center animate-in zoom-in duration-300">
                   <div className="w-14 h-14 lg:w-20 lg:h-20 bg-vidiooh/20 rounded-full flex items-center justify-center mx-auto mb-3 shadow-[0_0_30px_rgba(34,197,94,0.2)]">
-                    <FileVideo className="text-vidiooh" size={32} />
+                    {/* Icono condicional: Si es imagen sale el icono de imagen */}
+                    {file.type.startsWith('image/') ? <ImageIcon className="text-vidiooh" size={32} /> : <FileVideo className="text-vidiooh" size={32} />}
                   </div>
                   <h3 className="text-lg font-bold text-white mb-1 truncate max-w-[250px]">{file.name}</h3>
                   {videoMeta && (
@@ -506,17 +554,29 @@ export default function ConvertPage() {
                           <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${videoMeta.orientation === 'vertical' ? 'bg-amber-500/20 text-amber-500' : 'bg-blue-500/20 text-blue-500'}`}>{videoMeta.orientation}</span>
                       </div>
                   )}
+                  {/* PREVIEW DE IMAGEN SI ES IMAGEN */}
+                  {file.type.startsWith('image/') && (
+                      <div className="mb-4 rounded-lg overflow-hidden border border-slate-700 max-h-32">
+                          <img src={URL.createObjectURL(file)} alt="Preview" className="w-full h-full object-cover opacity-70" />
+                      </div>
+                  )}
+
                   <p className="text-emerald-400 text-xs font-medium mb-4">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
                   <button onClick={(e) => { e.stopPropagation(); setFile(null); setVideoMeta(null); }} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-full text-xs transition-colors flex items-center gap-2 mx-auto hover:text-white"><X size={14} /> Cambiar</button>
                 </div>
               ) : (
                 <div className="text-center group">
                   <div className="w-14 h-14 lg:w-20 lg:h-20 bg-[#1A202C] rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform shadow-xl group-hover:shadow-[0_0_20px_rgba(34,197,94,0.2)]">
-                    <Upload className="text-vidiooh" size={28} />
+                    {/* Icono animado al hacer hover */}
+                    {isDragActive ? <Zap className="text-vidiooh animate-bounce" size={28}/> : <Upload className="text-vidiooh" size={28} />}
                   </div>
-                  <h3 className="text-lg lg:text-2xl font-bold text-white mb-1">Cargar Video</h3>
+                  <h3 className="text-lg lg:text-2xl font-bold text-white mb-1">Cargar Video o Imagen</h3>
                   <p className="text-vidiooh text-sm font-medium mb-2 lg:mb-4 group-hover:underline decoration-2 underline-offset-4">Toca para explorar</p>
-                  <p className="text-slate-500 text-xs">Máx. {(currentSizeLimit / 1024 / 1024).toFixed(0)}MB (.mp4)</p>
+                  <div className="flex justify-center gap-2 text-slate-500 text-[10px] uppercase font-bold tracking-wider">
+                      <span className="bg-slate-800 px-2 py-1 rounded">MP4</span>
+                      <span className="bg-slate-800 px-2 py-1 rounded">JPG</span>
+                      <span className="bg-slate-800 px-2 py-1 rounded">PNG</span>
+                  </div>
                 </div>
               )}
             </div>
@@ -526,7 +586,7 @@ export default function ConvertPage() {
                     <Ban className="text-red-500 shrink-0 mt-0.5" size={20}/>
                     <div>
                         <h4 className="text-red-200 font-bold text-sm">Formato Incompatible</h4>
-                        <p className="text-red-400/80 text-xs mt-1">Estás intentando convertir un video <strong className="uppercase">{videoMeta?.orientation}</strong> a un formato <strong className="uppercase">{selectedFormat?.orientation}</strong>.</p>
+                        <p className="text-red-400/80 text-xs mt-1">Estás intentando convertir un archivo <strong className="uppercase">{videoMeta?.orientation}</strong> a un formato <strong className="uppercase">{selectedFormat?.orientation}</strong>.</p>
                     </div>
                 </div>
             )}
